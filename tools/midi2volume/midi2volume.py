@@ -16,16 +16,15 @@ import time
 import threading
 
 try:
-    import rtmidi
+    import mido
 except ImportError:
-    print("Error: python-rtmidi not installed. Run: pip install python-rtmidi")
+    print("Error: mido not installed. Run: pip install mido")
     sys.exit(1)
 
 
 def list_midi_ports():
     """List available MIDI input ports."""
-    midi_in = rtmidi.MidiIn()
-    ports = midi_in.get_ports()
+    ports = mido.get_input_names()
 
     if not ports:
         print("No MIDI input ports found.")
@@ -85,34 +84,37 @@ class MidiVolumeController:
 
     def start(self):
         """Start listening for MIDI messages."""
-        self.midi_in = rtmidi.MidiIn()
-        ports = self.midi_in.get_ports()
+        ports = mido.get_input_names()
 
         # Find the port
-        port_index = None
+        port_name = None
         if isinstance(self.midi_port, int):
             if self.midi_port < len(ports):
-                port_index = self.midi_port
+                port_name = ports[self.midi_port]
         else:
-            for i, port in enumerate(ports):
+            for port in ports:
                 if self.midi_port.lower() in port.lower():
-                    port_index = i
+                    port_name = port
                     break
 
-        if port_index is None:
+        if port_name is None:
             print(f"Error: MIDI port '{self.midi_port}' not found.")
             print("Available ports:")
             for i, port in enumerate(ports):
                 print(f"  {i}: {port}")
             return False
 
-        self.midi_in.open_port(port_index)
-        self.midi_in.set_callback(self.midi_callback)
+        try:
+            self.midi_in = mido.open_input(port_name)
+        except Exception as e:
+            print(f"Error opening MIDI port: {e}")
+            return False
+
         self.running = True
 
         print(f"MIDI Volume Controller")
         print(f"======================")
-        print(f"MIDI Port: {ports[port_index]}")
+        print(f"MIDI Port: {port_name}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
         print(f"CC Number: {self.cc_number}")
         print(f"Invert: {self.invert}")
@@ -135,7 +137,7 @@ class MidiVolumeController:
             self.debounce_timer.cancel()
             self.debounce_timer = None
         if self.midi_in:
-            self.midi_in.close_port()
+            self.midi_in.close()
             self.midi_in = None
 
     def apply_volume(self, volume):
@@ -152,29 +154,21 @@ class MidiVolumeController:
             self.pending_volume = None
         self.debounce_timer = None
 
-    def midi_callback(self, event, data=None):
-        """Handle incoming MIDI messages."""
-        message, delta_time = event
-
-        if len(message) < 3:
-            return
-
-        status = message[0]
-        cc = message[1]
-        value = message[2]
-
-        # Check if it's a CC message (0xB0-0xBF)
-        if not (0xB0 <= status <= 0xBF):
+    def process_message(self, msg):
+        """Process a MIDI message."""
+        # Check if it's a CC message
+        if msg.type != 'control_change':
             return
 
         # Check channel
-        msg_channel = status & 0x0F
-        if msg_channel != self.midi_channel:
+        if msg.channel != self.midi_channel:
             return
 
         # Check CC number
-        if cc != self.cc_number:
+        if msg.control != self.cc_number:
             return
+
+        value = msg.value
 
         # Convert MIDI value (0-127) to volume (0-100)
         if self.invert:
@@ -201,6 +195,13 @@ class MidiVolumeController:
                 delay = (self.debounce_ms - time_since_last) / 1000.0
                 self.debounce_timer = threading.Timer(delay, self.apply_pending_volume)
                 self.debounce_timer.start()
+
+    def run(self):
+        """Main loop to process MIDI messages."""
+        while self.running:
+            for msg in self.midi_in.iter_pending():
+                self.process_message(msg)
+            time.sleep(0.001)  # Small sleep to avoid busy-waiting
 
 
 def main():
@@ -254,8 +255,7 @@ Examples:
         sys.exit(1)
 
     try:
-        while controller.running:
-            time.sleep(0.1)
+        controller.run()
     except KeyboardInterrupt:
         print("\nStopping...")
     finally:
