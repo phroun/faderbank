@@ -6,6 +6,12 @@ Listens to MIDI CC messages and controls macOS system master volume.
 
 ```bash
 cd tools/midi2volume
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -31,6 +37,7 @@ python midi2volume.py -m "IAC Driver" -c 1 --cc 7 --invert
 | `-c`, `--channel` | MIDI channel 1-16 (default: 1) |
 | `--cc` | CC number to listen for (default: 7) |
 | `--invert` | Invert CC values |
+| `--debounce` | Debounce interval in ms (default: 100) |
 
 ## Notes
 
