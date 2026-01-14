@@ -371,28 +371,63 @@ def guest_action():
 
 ## Step 7: Sync User to Local DB
 
-When a user accesses your service, update your local user table:
+When a user accesses your service, update your local user table. **Important:** Make database sync non-fatal so auth still works if the database is unavailable.
 
 ```python
-def get_zebby_user_info():
-    # ... after getting user_data from API ...
+import logging
 
+def get_zebby_user_info():
+    """Get user info from Zebby API. Returns None if not logged in."""
+    zebby_session = request.cookies.get('zebby_session')
+
+    if not zebby_session:
+        return None
+
+    try:
+        response = requests.get(
+            'https://zebby.org/api/user/info',
+            cookies={'zebby_session': zebby_session}
+        )
+
+        if response.status_code != 200:
+            return None
+
+        user_data = response.json()
+
+        # Sync user to local database (non-fatal if it fails)
+        try:
+            sync_user(user_data)
+        except Exception as e:
+            logging.error(f"Failed to sync user to database: {e}")
+
+        return user_data
+    except:
+        return None
+
+
+def sync_user(user_data):
+    """Sync Zebby user data to local database."""
     db = get_db()
     cursor = db.cursor()
 
-    cursor.execute(
-        """INSERT INTO user (id, last_active_at)
-           VALUES (%s, NOW())
-           ON DUPLICATE KEY UPDATE last_active_at = NOW()""",
-        (user_data['user_id'],)
-    )
-
-    db.commit()
-    cursor.close()
-    db.close()
-
-    return user_data
+    try:
+        cursor.execute(
+            """INSERT INTO user (id, last_active_at)
+               VALUES (%s, NOW())
+               ON DUPLICATE KEY UPDATE last_active_at = NOW()""",
+            (user_data['user_id'],)
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
 ```
+
+### Why Non-Fatal Database Sync?
+
+If the database sync is inside the main try/except block and throws an exception (e.g., connection refused, access denied), it will cause `get_zebby_user_info()` to return `None` - making it appear the user isn't logged in, even though they are. This results in an infinite redirect loop to login.
+
+By wrapping the sync in its own try/except, auth continues to work even if the database is temporarily unavailable.
 
 ## Step 8: WSGI Entry Point
 
