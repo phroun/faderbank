@@ -10,7 +10,7 @@ Usage:
     python midi2click.py -m "IAC" --cc 64    # Click on CC 64 from IAC port
 
 Requirements:
-    pip install pygame pyobjc-framework-Quartz
+    pip install mido python-rtmidi pyobjc-framework-Quartz
 """
 
 import argparse
@@ -19,23 +19,15 @@ import sys
 import time
 
 try:
-    import pygame
-    import pygame.midi
-except ImportError as e:
-    print(f"Error importing pygame.midi: {e}")
-    print("Try: pip install pygame")
-    sys.exit(1)
-except Exception as e:
-    print(f"Error loading pygame.midi: {e}")
-    print("pygame may not support MIDI on this platform/Python version.")
+    import mido
+except ImportError:
+    print("Error: mido not installed. Run: pip install mido python-rtmidi")
     sys.exit(1)
 
 try:
-    import Quartz
     from Quartz import (
         CGEventCreateMouseEvent,
         CGEventPost,
-        CGEventCreate,
         CGMainDisplayID,
         CGDisplayBounds,
         kCGEventMouseMoved,
@@ -112,28 +104,27 @@ class MidiToClick:
 
     def start(self):
         """Start listening for MIDI."""
-        pygame.midi.init()
-
         # Find matching input port
-        port_index = None
+        available_ports = mido.get_input_names()
         port_name = None
-        for i in range(pygame.midi.get_count()):
-            info = pygame.midi.get_device_info(i)
-            name = info[1].decode('utf-8')
-            is_input = info[2]
-            if is_input and self.midi_port.lower() in name.lower():
-                port_index = i
+
+        for name in available_ports:
+            if self.midi_port.lower() in name.lower():
                 port_name = name
                 break
 
-        if port_index is None:
+        if port_name is None:
             print(f"Error: MIDI input port '{self.midi_port}' not found.")
             print("Available input ports:")
             list_midi_ports()
-            pygame.midi.quit()
             return False
 
-        self.midi_in = pygame.midi.Input(port_index)
+        try:
+            self.midi_in = mido.open_input(port_name)
+        except Exception as e:
+            print(f"Error opening MIDI port: {e}")
+            return False
+
         self.running = True
 
         width, height = self.get_screen_size()
@@ -152,29 +143,24 @@ class MidiToClick:
     def run(self):
         """Main loop to process MIDI messages."""
         while self.running:
-            if self.midi_in.poll():
-                events = self.midi_in.read(10)
-                for event in events:
-                    data = event[0]
-                    status = data[0]
+            # Non-blocking read with timeout
+            for msg in self.midi_in.iter_pending():
+                if msg.type == 'control_change':
+                    channel = msg.channel
+                    cc_num = msg.control
+                    cc_val = msg.value
 
-                    # Check if it's a CC message
-                    if (status & 0xF0) == 0xB0:
-                        channel = status & 0x0F
-                        cc_num = data[1]
-                        cc_val = data[2]
+                    if self.debug:
+                        print(f"CC: ch={channel+1} cc={cc_num} val={cc_val}")
 
-                        if self.debug:
-                            print(f"CC: ch={channel+1} cc={cc_num} val={cc_val}")
+                    # Check if this is our target CC on our channel
+                    if channel == self.midi_channel and cc_num == self.cc_number:
+                        # Trigger on rising edge above threshold (only on positive values)
+                        if cc_val > 0 and cc_val >= self.threshold and self.last_cc_value < self.threshold:
+                            print(f"Triggered! CC {cc_num} = {cc_val}")
+                            self.perform_click_action()
 
-                        # Check if this is our target CC on our channel
-                        if channel == self.midi_channel and cc_num == self.cc_number:
-                            # Trigger on rising edge above threshold (only on positive values)
-                            if cc_val > 0 and cc_val >= self.threshold and self.last_cc_value < self.threshold:
-                                print(f"Triggered! CC {cc_num} = {cc_val}")
-                                self.perform_click_action()
-
-                            self.last_cc_value = cc_val
+                        self.last_cc_value = cc_val
 
             time.sleep(0.001)  # Small delay to prevent CPU spinning
 
@@ -183,26 +169,19 @@ class MidiToClick:
         self.running = False
         if self.midi_in:
             self.midi_in.close()
-        pygame.midi.quit()
         print("\nStopped.")
 
 
 def list_midi_ports():
     """List available MIDI input ports."""
-    pygame.midi.init()
     print("MIDI Input Ports:")
     print("-" * 40)
-    found = False
-    for i in range(pygame.midi.get_count()):
-        info = pygame.midi.get_device_info(i)
-        name = info[1].decode('utf-8')
-        is_input = info[2]
-        if is_input:
+    ports = mido.get_input_names()
+    if ports:
+        for i, name in enumerate(ports):
             print(f"  [{i}] {name}")
-            found = True
-    if not found:
+    else:
         print("  No MIDI input ports found.")
-    pygame.midi.quit()
 
 
 def main():
