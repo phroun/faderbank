@@ -16,6 +16,7 @@ Requires:
 """
 
 import argparse
+import math
 import signal
 import sys
 import time
@@ -35,7 +36,8 @@ except ImportError:
 
 
 class OBSToMidi:
-    def __init__(self, host, port, password, source_mappings, midi_port, midi_channel=1, update_rate=10, debug=False):
+    def __init__(self, host, port, password, source_mappings, midi_port, midi_channel=1,
+                 update_rate=10, gain_db=0, min_db=-60, debug=False):
         self.host = host
         self.port = port
         self.password = password
@@ -43,6 +45,8 @@ class OBSToMidi:
         self.midi_port = midi_port
         self.midi_channel = midi_channel - 1  # Convert to 0-indexed
         self.update_interval = 1.0 / update_rate  # Time between MIDI updates
+        self.gain_db = gain_db
+        self.min_db = min_db
         self.debug = debug
 
         self.running = False
@@ -136,6 +140,9 @@ class OBSToMidi:
             print(f"  {source} -> CC {cc}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
         print(f"Update Rate: {int(1.0 / self.update_interval)} Hz")
+        if self.gain_db != 0:
+            print(f"Gain: {self.gain_db:+.1f} dB")
+        print(f"Level Range: {self.min_db:.0f} dB to 0 dB")
         if self.debug:
             print("Debug mode: ON")
         print()
@@ -156,19 +163,28 @@ class OBSToMidi:
                         continue
 
                     # Use peak of buffered values (more responsive than average for VU)
-                    peak_level = max(buffer)
+                    peak_linear = max(buffer)
                     self.level_buffers[source_name] = []  # Clear buffer
 
+                    # Convert linear amplitude to dB and apply gain
+                    if peak_linear > 0:
+                        db = 20 * math.log10(peak_linear) + self.gain_db
+                    else:
+                        db = self.min_db
+
+                    # Normalize dB to 0-1 range (min_db..0dB -> 0..1)
+                    db_range = abs(self.min_db)
+                    level = max(0, min(1, (db - self.min_db) / db_range))
+
                     # Convert to MIDI CC (0-127)
-                    level_clamped = max(0, min(1, peak_level))
-                    cc_value = int(level_clamped * 127)
+                    cc_value = int(level * 127)
 
                     # Only send if changed
                     if self.last_cc_values.get(source_name) != cc_value:
                         self.last_cc_values[source_name] = cc_value
                         self.send_cc(cc_num, cc_value)
                         if self.debug:
-                            print(f"  {source_name}: level={peak_level:.3f} -> CC{cc_num}={cc_value}")
+                            print(f"  {source_name}: {db:.1f}dB -> CC{cc_num}={cc_value}")
 
     def on_input_volume_meters(self, data):
         """Handle incoming volume meter data from OBS."""
@@ -364,6 +380,10 @@ OBS WebSocket Setup:
                         help='OBS WebSocket port (default: 4455)')
     parser.add_argument('--password', type=str, default='',
                         help='OBS WebSocket password (if set)')
+    parser.add_argument('--gain', type=float, default=0,
+                        help='Input gain in dB (default: 0, try +20 to +40 for quiet signals)')
+    parser.add_argument('--min-db', type=float, default=-60,
+                        help='Minimum dB level / floor (default: -60, try -40 for less range)')
     parser.add_argument('--debug', action='store_true',
                         help='Show debug output when CC values are sent')
 
@@ -402,6 +422,8 @@ OBS WebSocket Setup:
         source_mappings=source_mappings,
         midi_port=args.midi_port,
         midi_channel=args.midi_channel,
+        gain_db=args.gain,
+        min_db=args.min_db,
         debug=args.debug
     )
 
