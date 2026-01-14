@@ -813,12 +813,17 @@
     }
 
     function hitTest(x, y) {
+        // Calculate xOffset same as render() does
+        const unassignedButtons = buttons.filter(b => !b.channel_strip_id);
+        const hasUnassignedButtons = unassignedButtons.length > 0;
+        const xOffset = hasUnassignedButtons ? STRIP_WIDTH + STRIP_PADDING : 0;
+
         for (const channel of channels) {
             const bounds = channel._faderBounds;
             if (!bounds) continue;
 
             const index = channels.indexOf(channel);
-            const stripX = STRIP_PADDING + index * (STRIP_WIDTH + STRIP_PADDING);
+            const stripX = xOffset + STRIP_PADDING + index * (STRIP_WIDTH + STRIP_PADDING);
             const buttonY = FADER_TOP + FADER_HEIGHT + 20;
 
             // Check mute button
