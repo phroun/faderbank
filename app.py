@@ -802,9 +802,10 @@ def redeem_invite(token):
 
     if not user:
         # Not logged in - show login prompt but don't consume the link
+        # Use script_root + path for proper WSGIScriptAlias redirect
         return render_template('invite_login.html',
                                link=link,
-                               return_url=request.url)
+                               return_url=request.script_root + request.path)
 
     # Check if already a member
     existing_role = get_user_role(link['profile_id'], user['user_id'])
