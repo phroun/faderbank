@@ -35,7 +35,7 @@ except ImportError:
 
 
 class OBSToMidi:
-    def __init__(self, host, port, password, source_mappings, midi_port, midi_channel=1, update_rate=10):
+    def __init__(self, host, port, password, source_mappings, midi_port, midi_channel=1, update_rate=10, debug=False):
         self.host = host
         self.port = port
         self.password = password
@@ -43,6 +43,7 @@ class OBSToMidi:
         self.midi_port = midi_port
         self.midi_channel = midi_channel - 1  # Convert to 0-indexed
         self.update_interval = 1.0 / update_rate  # Time between MIDI updates
+        self.debug = debug
 
         self.running = False
         self.client = None
@@ -132,6 +133,8 @@ class OBSToMidi:
             print(f"  {source} -> CC {cc}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
         print(f"Update Rate: {int(1.0 / self.update_interval)} Hz")
+        if self.debug:
+            print("Debug mode: ON")
         print()
         print("Running... Press Ctrl+C to stop")
 
@@ -161,6 +164,8 @@ class OBSToMidi:
                     if self.last_cc_values.get(source_name) != cc_value:
                         self.last_cc_values[source_name] = cc_value
                         self.send_cc(cc_num, cc_value)
+                        if self.debug:
+                            print(f"  {source_name}: level={peak_level:.3f} -> CC{cc_num}={cc_value}")
 
     def on_input_volume_meters(self, data):
         """Handle incoming volume meter data from OBS."""
@@ -356,6 +361,8 @@ OBS WebSocket Setup:
                         help='OBS WebSocket port (default: 4455)')
     parser.add_argument('--password', type=str, default='',
                         help='OBS WebSocket password (if set)')
+    parser.add_argument('--debug', action='store_true',
+                        help='Show debug output when CC values are sent')
 
     args = parser.parse_args()
 
@@ -391,7 +398,8 @@ OBS WebSocket Setup:
         password=args.password,
         source_mappings=source_mappings,
         midi_port=args.midi_port,
-        midi_channel=args.midi_channel
+        midi_channel=args.midi_channel,
+        debug=args.debug
     )
 
     # Handle Ctrl+C
