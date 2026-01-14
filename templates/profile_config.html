@@ -65,6 +65,57 @@
         {% endfor %}
     </div>
 
+    <hr>
+    <div class="page-header">
+        <h2>Buttons</h2>
+        <button id="btn-add-button" class="btn btn-primary">Add Button</button>
+    </div>
+
+    <div id="buttons-list" class="buttons-config-list">
+        {% for button in buttons %}
+        <div class="button-config-item" data-button-id="{{ button.id }}">
+            <div class="button-drag-handle">&#9776;</div>
+            <div class="button-config-main">
+                <input type="text" class="button-label" value="{{ button.label }}" placeholder="Button label">
+            </div>
+            <div class="button-config-details">
+                <div class="config-field">
+                    <label>MIDI CC</label>
+                    <input type="number" class="button-cc" value="{{ button.midi_cc }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>On Value</label>
+                    <input type="number" class="button-on-value" value="{{ button.on_value }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>Off Value</label>
+                    <input type="number" class="button-off-value" value="{{ button.off_value }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>Mode</label>
+                    <select class="button-mode">
+                        <option value="momentary" {% if button.mode == 'momentary' %}selected{% endif %}>Momentary</option>
+                        <option value="toggle" {% if button.mode == 'toggle' %}selected{% endif %}>Toggle</option>
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label>Channel</label>
+                    <select class="button-channel">
+                        <option value="">Unassigned</option>
+                        {% for channel in channels %}
+                        <option value="{{ channel.id }}" {% if button.channel_strip_id == channel.id %}selected{% endif %}>{{ channel.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="button-config-actions">
+                <button class="btn btn-small btn-save-button">Save</button>
+                <button class="btn btn-small btn-danger btn-delete-button">Delete</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
     {% if role in ['owner', 'admin'] %}
     <hr>
     <h2>Members</h2>
@@ -360,5 +411,81 @@ async function saveOrder() {
         console.error('Error saving order', e);
     }
 }
+
+// Button management
+document.getElementById('btn-add-button').addEventListener('click', async () => {
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/button`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({label: 'New Button', midi_cc: 0})
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to add button');
+        }
+    } catch (e) {
+        alert('Error adding button');
+    }
+});
+
+document.querySelectorAll('.btn-save-button').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const item = this.closest('.button-config-item');
+        const buttonId = item.dataset.buttonId;
+
+        const channelVal = item.querySelector('.button-channel').value;
+        const data = {
+            label: item.querySelector('.button-label').value,
+            midi_cc: parseInt(item.querySelector('.button-cc').value) || 0,
+            on_value: parseInt(item.querySelector('.button-on-value').value) || 127,
+            off_value: parseInt(item.querySelector('.button-off-value').value) || 0,
+            mode: item.querySelector('.button-mode').value,
+            channel_strip_id: channelVal ? parseInt(channelVal) : null
+        };
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/button/${buttonId}/update`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.textContent = 'Saved!';
+                setTimeout(() => this.textContent = 'Save', 1500);
+            } else {
+                alert(result.error || 'Failed to save');
+            }
+        } catch (e) {
+            alert('Error saving button');
+        }
+    });
+});
+
+document.querySelectorAll('.btn-delete-button').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        if (!confirm('Delete this button?')) return;
+
+        const item = this.closest('.button-config-item');
+        const buttonId = item.dataset.buttonId;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/button/${buttonId}/delete`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                item.remove();
+            } else {
+                alert(result.error || 'Failed to delete');
+            }
+        } catch (e) {
+            alert('Error deleting button');
+        }
+    });
+});
 </script>
 {% endblock %}

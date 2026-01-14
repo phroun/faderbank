@@ -21,7 +21,9 @@ from database import (
     delete_channel_strip, reorder_channel_strips, update_fader_level,
     update_mute_state, update_solo_state, update_vu_levels_bulk,
     get_responsibility, take_responsibility, drop_responsibility,
-    update_profile_activity, get_active_users
+    update_profile_activity, get_active_users,
+    get_buttons, get_button, create_button, update_button, delete_button,
+    update_button_state, reorder_buttons
 )
 
 
@@ -245,6 +247,7 @@ def new_profile(user):
 def view_profile(user, profile, role, slug):
     """Main profile view with canvas fader bank."""
     channels = get_channel_strips(profile['id'])
+    buttons = get_buttons(profile['id'])
     resp = get_responsibility(profile['id'])
     members = get_profile_members(profile['id'])
 
@@ -261,6 +264,7 @@ def view_profile(user, profile, role, slug):
                            profile=profile,
                            role=role,
                            channels=channels,
+                           buttons=buttons,
                            responsibility=responsibility,
                            members=members)
 
@@ -270,6 +274,7 @@ def view_profile(user, profile, role, slug):
 def profile_config(user, profile, role, slug):
     """Profile configuration page."""
     channels = get_channel_strips(profile['id'])
+    buttons = get_buttons(profile['id'])
     members = get_profile_members(profile['id'])
     links = get_profile_activation_links(profile['id']) if role in ['owner', 'admin'] else []
 
@@ -278,6 +283,7 @@ def profile_config(user, profile, role, slug):
                            profile=profile,
                            role=role,
                            channels=channels,
+                           buttons=buttons,
                            members=members,
                            activation_links=links)
 
@@ -683,6 +689,177 @@ def api_reorder_channels(user, profile_id):
         socketio.emit('channels_reordered', {'order': channel_order}, room=f'profile_{profile_id}')
     except Exception as e:
         logging.warning(f"Failed to emit channels_reordered: {e}")
+
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# Button API Routes
+# =============================================================================
+
+@app.route('/api/profile/<int:profile_id>/buttons', methods=['GET'])
+@require_login
+def api_get_buttons(user, profile_id):
+    """Get all buttons for a profile."""
+    role = get_user_role(profile_id, user['user_id'])
+    if not role:
+        return jsonify({'error': 'Access denied'}), 403
+
+    buttons = get_buttons(profile_id)
+    return jsonify({'buttons': buttons})
+
+
+@app.route('/api/profile/<int:profile_id>/button', methods=['POST'])
+@require_login
+def api_create_button(user, profile_id):
+    """Create a new button."""
+    role = get_user_role(profile_id, user['user_id'])
+    if role not in ['owner', 'admin', 'technician']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json()
+
+    button_id = create_button(
+        profile_id=profile_id,
+        label=data.get('label', 'Button'),
+        midi_cc=data.get('midi_cc', 0),
+        on_value=data.get('on_value', 127),
+        off_value=data.get('off_value', 0),
+        mode=data.get('mode', 'momentary'),
+        channel_strip_id=data.get('channel_strip_id'),
+        display_order=data.get('display_order', 0)
+    )
+
+    button = get_button(button_id)
+
+    # Notify all users
+    try:
+        socketio.emit('button_created', {'button': button}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit button_created: {e}")
+
+    return jsonify({'success': True, 'button': button})
+
+
+@app.route('/api/button/<int:button_id>/update', methods=['POST'])
+@require_login
+def api_update_button(user, button_id):
+    """Update a button."""
+    button = get_button(button_id)
+    if not button:
+        return jsonify({'error': 'Button not found'}), 404
+
+    role = get_user_role(button['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json()
+
+    update_button(
+        button_id,
+        label=data.get('label'),
+        midi_cc=data.get('midi_cc'),
+        on_value=data.get('on_value'),
+        off_value=data.get('off_value'),
+        mode=data.get('mode'),
+        channel_strip_id=data.get('channel_strip_id'),
+        display_order=data.get('display_order')
+    )
+
+    updated_button = get_button(button_id)
+
+    # Notify all users
+    try:
+        socketio.emit('button_updated', {'button': updated_button}, room=f'profile_{button["profile_id"]}')
+    except Exception as e:
+        logging.warning(f"Failed to emit button_updated: {e}")
+
+    return jsonify({'success': True, 'button': updated_button})
+
+
+@app.route('/api/button/<int:button_id>/delete', methods=['POST'])
+@require_login
+def api_delete_button(user, button_id):
+    """Delete a button."""
+    button = get_button(button_id)
+    if not button:
+        return jsonify({'error': 'Button not found'}), 404
+
+    role = get_user_role(button['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    profile_id = button['profile_id']
+    delete_button(button_id)
+
+    # Notify all users
+    try:
+        socketio.emit('button_deleted', {'button_id': button_id}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit button_deleted: {e}")
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/button/<int:button_id>/press', methods=['POST'])
+@require_login
+def api_press_button(user, button_id):
+    """Press a button (operators and higher only)."""
+    button = get_button(button_id)
+    if not button:
+        return jsonify({'error': 'Button not found'}), 404
+
+    role = get_user_role(button['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician', 'operator']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    profile_id = button['profile_id']
+    new_state = None
+
+    # For toggle buttons, update the state
+    if button['mode'] == 'toggle':
+        new_state = not button['is_on']
+        update_button_state(button_id, new_state)
+
+    # Broadcast the press event to all clients
+    try:
+        socketio.emit('button_pressed', {
+            'button_id': button_id,
+            'mode': button['mode'],
+            'midi_cc': button['midi_cc'],
+            'on_value': button['on_value'],
+            'off_value': button['off_value'],
+            'new_state': new_state,  # For toggle: True/False, for momentary: None
+            'pressed_by': user['user_id']
+        }, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit button_pressed: {e}")
+
+    return jsonify({'success': True, 'new_state': new_state})
+
+
+@app.route('/api/profile/<int:profile_id>/buttons/reorder', methods=['POST'])
+@require_login
+def api_reorder_buttons(user, profile_id):
+    """Reorder buttons within a strip."""
+    role = get_user_role(profile_id, user['user_id'])
+    if role not in ['owner', 'admin', 'technician']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json()
+    channel_strip_id = data.get('channel_strip_id')  # None for unassigned buttons
+    button_order = data.get('order', [])
+
+    reorder_buttons(profile_id, channel_strip_id, button_order)
+
+    # Notify all users
+    try:
+        socketio.emit('buttons_reordered', {
+            'channel_strip_id': channel_strip_id,
+            'order': button_order
+        }, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit buttons_reordered: {e}")
 
     return jsonify({'success': True})
 

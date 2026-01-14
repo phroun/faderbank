@@ -103,3 +103,22 @@ CREATE TABLE session (
     last_accessed_at DATETIME NOT NULL,
     data JSON
 );
+
+-- Custom buttons for profiles
+CREATE TABLE button (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    profile_id INT NOT NULL,
+    label VARCHAR(255) NOT NULL,
+    midi_cc INT NOT NULL,                  -- CC number for button output (0-127)
+    on_value INT DEFAULT 127,              -- CC value when "on" (0-127)
+    off_value INT DEFAULT 0,               -- CC value when "off" (0-127)
+    mode ENUM('momentary', 'toggle') DEFAULT 'momentary',
+    channel_strip_id INT,                  -- NULL for unassigned buttons (shown in left strip)
+    display_order INT DEFAULT 0,           -- Order within its strip/unassigned area
+    is_on BOOLEAN DEFAULT FALSE,           -- Current state (for toggle buttons)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (profile_id) REFERENCES profile(id) ON DELETE CASCADE,
+    FOREIGN KEY (channel_strip_id) REFERENCES channel_strip(id) ON DELETE SET NULL,
+    INDEX idx_profile_buttons (profile_id, channel_strip_id, display_order)
+);

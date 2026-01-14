@@ -18,6 +18,8 @@
     const VU_HEIGHT = 180;
     const BUTTON_SIZE = 30;
     const BUTTON_GAP = 5;
+    const CUSTOM_BUTTON_HEIGHT = 28;
+    const CUSTOM_BUTTON_GAP = 4;
 
     // Colors
     const COLORS = {
@@ -33,6 +35,7 @@
 
     // State
     let channels = [...config.channels];
+    let buttons = [...(config.buttons || [])];
     let onlineUsers = config.initialOnlineUsers || {};
     let responsibilityUser = config.initialResponsibility || null;
     let socket = null;
@@ -376,6 +379,39 @@
                 location.href = '/';
             }
         });
+
+        // Button events
+        socket.on('button_pressed', (data) => {
+            // Update local button state for toggle buttons
+            const btn = buttons.find(b => b.id === data.button_id);
+            if (btn && data.new_state !== null) {
+                btn.is_on = data.new_state;
+            }
+            render();
+
+            // Send MIDI if enabled
+            if (midiOutput && midiEnabled) {
+                sendButtonMidi(data);
+            }
+        });
+
+        socket.on('button_created', (data) => {
+            buttons.push(data.button);
+            render();
+        });
+
+        socket.on('button_updated', (data) => {
+            const index = buttons.findIndex(b => b.id === data.button.id);
+            if (index !== -1) {
+                buttons[index] = data.button;
+                render();
+            }
+        });
+
+        socket.on('button_deleted', (data) => {
+            buttons = buttons.filter(b => b.id !== data.button_id);
+            render();
+        });
     }
 
     // ==========================================================================
@@ -393,14 +429,27 @@
         // Check if any solo is active
         const anySolo = channels.some(c => c.is_solo);
 
+        // Get unassigned buttons
+        const unassignedButtons = buttons.filter(b => !b.channel_strip_id);
+        const hasUnassignedButtons = unassignedButtons.length > 0;
+
+        // Calculate x offset (shift channels right if there's a buttons strip)
+        const xOffset = hasUnassignedButtons ? STRIP_WIDTH + STRIP_PADDING : 0;
+
+        // Render unassigned buttons strip (if any)
+        if (hasUnassignedButtons) {
+            renderButtonsStrip(unassignedButtons, STRIP_PADDING);
+        }
+
         // Render each channel strip
         channels.forEach((channel, index) => {
-            renderChannelStrip(channel, index, anySolo);
+            const channelButtons = buttons.filter(b => b.channel_strip_id === channel.id);
+            renderChannelStrip(channel, index, anySolo, xOffset, channelButtons);
         });
     }
 
-    function renderChannelStrip(channel, index, anySolo) {
-        const x = STRIP_PADDING + index * (STRIP_WIDTH + STRIP_PADDING);
+    function renderChannelStrip(channel, index, anySolo, xOffset = 0, channelButtons = []) {
+        const x = xOffset + STRIP_PADDING + index * (STRIP_WIDTH + STRIP_PADDING);
         const color = COLORS[channel.color] || COLORS.white;
 
         // Determine if channel is effectively muted (muted or not solo'd when solo active)
@@ -440,6 +489,15 @@
         ctx.font = '11px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(channel.current_level.toString(), x + STRIP_WIDTH / 2, buttonY + BUTTON_SIZE + 20);
+
+        // Custom buttons for this channel
+        if (channelButtons.length > 0) {
+            let customButtonY = buttonY + BUTTON_SIZE + 35;
+            channelButtons.forEach(btn => {
+                renderCustomButton(btn, x + 5, customButtonY, STRIP_WIDTH - 10, CUSTOM_BUTTON_HEIGHT);
+                customButtonY += CUSTOM_BUTTON_HEIGHT + CUSTOM_BUTTON_GAP;
+            });
+        }
     }
 
     function renderVUMeter(channel, x, y, width, height, isMuted) {
@@ -592,6 +650,48 @@
         ctx.textBaseline = 'alphabetic';
     }
 
+    function renderButtonsStrip(btns, x) {
+        // Strip background
+        ctx.fillStyle = 'rgba(30, 30, 50, 0.5)';
+        ctx.fillRect(x, 0, STRIP_WIDTH, canvas.displayHeight);
+
+        // Render each button
+        let buttonY = FADER_TOP;
+        btns.forEach(btn => {
+            renderCustomButton(btn, x + 5, buttonY, STRIP_WIDTH - 10, CUSTOM_BUTTON_HEIGHT);
+            buttonY += CUSTOM_BUTTON_HEIGHT + CUSTOM_BUTTON_GAP;
+        });
+    }
+
+    function renderCustomButton(btn, x, y, width, height) {
+        const isOn = btn.is_on;
+        const isToggle = btn.mode === 'toggle';
+
+        // Button background
+        ctx.fillStyle = isOn ? '#3b82f6' : '#333';
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, 4);
+        ctx.fill();
+
+        // Button border
+        ctx.strokeStyle = isOn ? '#60a5fa' : '#555';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, 4);
+        ctx.stroke();
+
+        // Button label
+        ctx.fillStyle = isOn ? '#fff' : '#aaa';
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(truncateText(btn.label, width - 8), x + width / 2, y + height / 2);
+        ctx.textBaseline = 'alphabetic';
+
+        // Store button bounds for hit testing
+        btn._bounds = { x, y, width, height };
+    }
+
     function truncateText(text, maxWidth) {
         const measured = ctx.measureText(text);
         if (measured.width <= maxWidth) return text;
@@ -637,6 +737,14 @@
         if (!config.canOperate) return;
 
         const coords = getCanvasCoords(e);
+
+        // First check for custom button clicks
+        const clickedButton = hitTestButton(coords.x, coords.y);
+        if (clickedButton) {
+            pressButton(clickedButton);
+            return;
+        }
+
         const hit = hitTest(coords.x, coords.y);
 
         if (hit) {
@@ -732,6 +840,36 @@
             }
         }
         return null;
+    }
+
+    function hitTestButton(x, y) {
+        // Check all buttons for hit
+        for (const btn of buttons) {
+            if (btn._bounds) {
+                const b = btn._bounds;
+                if (x >= b.x && x <= b.x + b.width &&
+                    y >= b.y && y <= b.y + b.height) {
+                    return btn;
+                }
+            }
+        }
+        return null;
+    }
+
+    async function pressButton(btn) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/button/${btn.id}/press`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+            if (!data.success) {
+                console.error('Failed to press button:', data.error);
+            }
+            // Server will broadcast the button_pressed event to all clients
+        } catch (e) {
+            console.error('Error pressing button:', e);
+        }
     }
 
     function updateFaderFromDrag(currentY) {
@@ -1035,6 +1173,26 @@
         const status = 0xB0 + (midiChannel - 1);
         const value = channel.is_solo ? 127 : 0;
         midiOutput.send([status, channel.midi_cc_solo, value]);
+    }
+
+    function sendButtonMidi(data) {
+        if (!midiOutput || !midiEnabled) return;
+
+        const status = 0xB0 + (midiChannel - 1);
+
+        if (data.mode === 'momentary') {
+            // Momentary: send on_value, then off_value after short delay
+            midiOutput.send([status, data.midi_cc, data.on_value]);
+            setTimeout(() => {
+                if (midiOutput && midiEnabled) {
+                    midiOutput.send([status, data.midi_cc, data.off_value]);
+                }
+            }, 50);
+        } else {
+            // Toggle: send based on new_state
+            const value = data.new_state ? data.on_value : data.off_value;
+            midiOutput.send([status, data.midi_cc, value]);
+        }
     }
 
     function recalculateMidiOutputs() {

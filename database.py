@@ -895,3 +895,144 @@ def cleanup_old_activity():
     finally:
         cursor.close()
         db.close()
+
+
+# =============================================================================
+# Button Operations
+# =============================================================================
+
+def get_buttons(profile_id):
+    """Get all buttons for a profile."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            """SELECT * FROM button
+               WHERE profile_id = %s
+               ORDER BY channel_strip_id IS NULL DESC, channel_strip_id, display_order""",
+            (profile_id,)
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def get_button(button_id):
+    """Get a single button."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute("SELECT * FROM button WHERE id = %s", (button_id,))
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def create_button(profile_id, label, midi_cc, on_value=127, off_value=0,
+                  mode='momentary', channel_strip_id=None, display_order=0):
+    """Create a new button."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            """INSERT INTO button
+               (profile_id, label, midi_cc, on_value, off_value, mode, channel_strip_id, display_order)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (profile_id, label, midi_cc, on_value, off_value, mode, channel_strip_id, display_order)
+        )
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        cursor.close()
+        db.close()
+
+
+def update_button(button_id, **kwargs):
+    """Update button properties."""
+    if not kwargs:
+        return
+
+    db = get_db()
+    cursor = db.cursor()
+
+    allowed_fields = ['label', 'midi_cc', 'on_value', 'off_value', 'mode',
+                      'channel_strip_id', 'display_order', 'is_on']
+
+    updates = []
+    params = []
+
+    for field, value in kwargs.items():
+        if field in allowed_fields:
+            updates.append(f"{field} = %s")
+            params.append(value)
+
+    if updates:
+        params.append(button_id)
+        try:
+            cursor.execute(
+                f"UPDATE button SET {', '.join(updates)} WHERE id = %s",
+                params
+            )
+            db.commit()
+        finally:
+            cursor.close()
+            db.close()
+
+
+def delete_button(button_id):
+    """Delete a button."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute("DELETE FROM button WHERE id = %s", (button_id,))
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def update_button_state(button_id, is_on):
+    """Update button on/off state (for toggle buttons)."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            "UPDATE button SET is_on = %s WHERE id = %s",
+            (is_on, button_id)
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def reorder_buttons(profile_id, channel_strip_id, button_order):
+    """Reorder buttons within a strip. button_order is a list of button IDs."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        for position, button_id in enumerate(button_order):
+            if channel_strip_id is None:
+                cursor.execute(
+                    """UPDATE button SET display_order = %s
+                       WHERE id = %s AND profile_id = %s AND channel_strip_id IS NULL""",
+                    (position, button_id, profile_id)
+                )
+            else:
+                cursor.execute(
+                    """UPDATE button SET display_order = %s
+                       WHERE id = %s AND profile_id = %s AND channel_strip_id = %s""",
+                    (position, button_id, profile_id, channel_strip_id)
+                )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()

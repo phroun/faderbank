@@ -580,6 +580,58 @@ body {
     gap: 0.25rem;
 }
 
+/* Button Config */
+.buttons-config-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.button-config-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.button-config-item.dragging {
+    opacity: 0.5;
+}
+
+.button-drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+.button-config-main {
+    flex: 1;
+    min-width: 120px;
+}
+
+.button-config-main input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.button-config-details {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.button-config-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
 /* Members List */
 .members-list {
     display: flex;
