@@ -69,7 +69,7 @@ def require_login(f):
     def decorated_function(*args, **kwargs):
         user = get_zebby_user_info()
         if not user:
-            return_url = request.path
+            return_url = request.script_root + request.path
             return redirect(f'/login?return_to={return_url}')
         return f(user=user, *args, **kwargs)
     return decorated_function
@@ -82,7 +82,7 @@ def require_profile_access(min_role=None):
         def decorated_function(slug, *args, **kwargs):
             user = get_zebby_user_info()
             if not user:
-                return_url = request.path
+                return_url = request.script_root + request.path
                 return redirect(f'/login?return_to={return_url}')
 
             profile = get_profile_by_slug(slug)
