@@ -685,11 +685,15 @@
         // Optimistically bump version to prevent stale poll data from reverting our change
         channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
 
-        // Send via API (works under mod_wsgi)
+        // Send via API and update version from response
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/level`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({level: channel.current_level})
+        }).then(r => r.json()).then(data => {
+            if (data.version) {
+                channelVersions[channel.id] = data.version;
+            }
         }).catch(err => console.warn('Failed to update fader:', err));
 
         // Also try Socket.IO for faster sync if available
@@ -713,11 +717,15 @@
         // Optimistically bump version to prevent stale poll data from reverting our change
         channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
 
-        // Send via API
+        // Send via API and update version from response
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/mute`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({is_muted: channel.is_muted})
+        }).then(r => r.json()).then(data => {
+            if (data.version) {
+                channelVersions[channel.id] = data.version;
+            }
         }).catch(err => console.warn('Failed to update mute:', err));
 
         // Also try Socket.IO
@@ -740,11 +748,15 @@
         // Optimistically bump version to prevent stale poll data from reverting our change
         channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
 
-        // Send via API
+        // Send via API and update version from response
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/solo`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({is_solo: channel.is_solo})
+        }).then(r => r.json()).then(data => {
+            if (data.version) {
+                channelVersions[channel.id] = data.version;
+            }
         }).catch(err => console.warn('Failed to update solo:', err));
 
         // Also try Socket.IO

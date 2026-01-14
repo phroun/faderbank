@@ -415,7 +415,11 @@ def api_update_channel_level(user, channel_id):
 
     update_fader_level(channel_id, level)
 
-    return jsonify({'success': True})
+    # Get the new version to return to client
+    updated = get_channel_strip(channel_id)
+    new_version = updated.get('state_version') or 0
+
+    return jsonify({'success': True, 'version': new_version})
 
 
 @app.route('/api/channel/<int:channel_id>/mute', methods=['POST'])
@@ -435,7 +439,11 @@ def api_toggle_channel_mute(user, channel_id):
 
     update_mute_state(channel_id, is_muted)
 
-    return jsonify({'success': True, 'is_muted': is_muted})
+    # Get the new version to return to client
+    updated = get_channel_strip(channel_id)
+    new_version = updated.get('state_version') or 0
+
+    return jsonify({'success': True, 'is_muted': is_muted, 'version': new_version})
 
 
 @app.route('/api/channel/<int:channel_id>/solo', methods=['POST'])
@@ -455,7 +463,11 @@ def api_toggle_channel_solo(user, channel_id):
 
     update_solo_state(channel_id, is_solo)
 
-    return jsonify({'success': True, 'is_solo': is_solo})
+    # Get the new version to return to client
+    updated = get_channel_strip(channel_id)
+    new_version = updated.get('state_version') or 0
+
+    return jsonify({'success': True, 'is_solo': is_solo, 'version': new_version})
 
 
 @app.route('/api/profile/<int:profile_id>/responsibility/take', methods=['POST'])
