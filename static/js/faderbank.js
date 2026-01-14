@@ -1174,32 +1174,98 @@
     }
 
     // ==========================================================================
-    // Online Users
+    // Online Users (Operators and Guests)
     // ==========================================================================
 
     function updateOnlineUsersList() {
-        const list = document.getElementById('online-users');
-        list.innerHTML = '';
+        const operatorsList = document.getElementById('operators-list');
+        const guestsList = document.getElementById('guests-list');
+        const guestsSection = document.getElementById('guests-section');
 
+        operatorsList.innerHTML = '';
+        guestsList.innerHTML = '';
+
+        const operators = [];
+        const guests = [];
+
+        // Split users by role
         Object.entries(onlineUsers).forEach(([userId, user]) => {
-            const li = document.createElement('li');
+            const userWithId = { ...user, id: userId };
+            if (user.role === 'guest') {
+                guests.push(userWithId);
+            } else {
+                // owner, admin, technician, operator all go in operators list
+                operators.push(userWithId);
+            }
+        });
 
+        // Render operators
+        operators.forEach(user => {
+            operatorsList.appendChild(createUserListItem(user));
+        });
+
+        // If no operators, show a placeholder
+        if (operators.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'user-list-empty';
+            li.textContent = 'No operators recently';
+            operatorsList.appendChild(li);
+        }
+
+        // Render guests section (only show if there are guests)
+        if (guests.length > 0) {
+            guestsSection.style.display = 'block';
+            guests.forEach(user => {
+                guestsList.appendChild(createUserListItem(user));
+            });
+        } else {
+            guestsSection.style.display = 'none';
+        }
+    }
+
+    function createUserListItem(user) {
+        const li = document.createElement('li');
+        const secondsAgo = user.seconds_ago || 0;
+
+        // Determine activity state:
+        // - Active (green dot): seen in last 30 seconds
+        // - Inactive (no dot): seen 30 seconds to 3 minutes ago
+        // - Faded (no dot, faded name): seen more than 3 minutes ago
+        const isActive = secondsAgo <= 30;
+        const isFaded = secondsAgo > 180; // 3 minutes
+
+        if (isFaded) {
+            li.className = 'user-inactive-faded';
+        } else if (!isActive) {
+            li.className = 'user-inactive';
+        }
+
+        // Only show green dot if active
+        if (isActive) {
             const indicator = document.createElement('span');
             indicator.className = 'user-online-indicator';
             li.appendChild(indicator);
+        }
 
-            const name = document.createElement('span');
-            const hasResponsibility = responsibilityUser && responsibilityUser.user_id === parseInt(userId);
-            if (hasResponsibility) {
-                name.className = 'user-has-responsibility';
-                name.textContent = '🎛️ ' + user.display_name;
-            } else {
-                name.textContent = user.display_name;
-            }
-            li.appendChild(name);
+        const name = document.createElement('span');
+        const hasResponsibility = responsibilityUser && responsibilityUser.user_id === parseInt(user.id);
+        if (hasResponsibility) {
+            name.className = 'user-has-responsibility';
+            name.textContent = '🎛️ ' + user.display_name;
+        } else {
+            name.textContent = user.display_name;
+        }
+        li.appendChild(name);
 
-            list.appendChild(li);
-        });
+        // Add "(you)" indicator for current user
+        if (parseInt(user.id) === config.userId) {
+            const youSpan = document.createElement('span');
+            youSpan.className = 'user-you-indicator';
+            youSpan.textContent = ' (you)';
+            li.appendChild(youSpan);
+        }
+
+        return li;
     }
 
     function updateMidiDebug(message) {

@@ -407,6 +407,25 @@ body {
     font-weight: 600;
 }
 
+.user-inactive {
+    /* Recently inactive - no green dot but normal text */
+}
+
+.user-inactive-faded {
+    opacity: 0.5;
+}
+
+.user-list-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+.user-you-indicator {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
 /* MIDI Controls */
 .midi-controls {
     display: flex;

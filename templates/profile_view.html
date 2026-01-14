@@ -40,10 +40,14 @@
                     <button id="btn-drop-responsibility" class="btn btn-small" style="display:none;">Drop Responsibility</button>
                 </div>
             </div>
-            <h3>Online Users</h3>
-            <ul id="online-users" class="user-list">
-                <li data-user-id="{{ user.user_id }}">{{ user.display_name }} (you)</li>
+            <h3>Operators</h3>
+            <ul id="operators-list" class="user-list">
             </ul>
+            <div id="guests-section" style="display:none;">
+                <h3>Guests</h3>
+                <ul id="guests-list" class="user-list">
+                </ul>
+            </div>
         </div>
     </div>
 </div>
@@ -104,7 +108,7 @@ window.FADERBANK = {
     role: '{{ role }}',
     channels: {{ channels | tojson }},
     canOperate: {{ 'true' if role in ['owner', 'admin', 'technician', 'operator'] else 'false' }},
-    initialOnlineUsers: { {{ user.user_id }}: { display_name: '{{ user.display_name or user.username }}' } },
+    initialOnlineUsers: { {{ user.user_id }}: { display_name: '{{ user.display_name or user.username }}', role: '{{ role }}', seconds_ago: 0 } },
     initialResponsibility: {{ responsibility | tojson if responsibility else 'null' }}
 };
 </script>

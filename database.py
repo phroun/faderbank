@@ -858,20 +858,23 @@ def update_profile_activity(profile_id, user_id):
         db.close()
 
 
-def get_active_users(profile_id, timeout_seconds=30):
-    """Get users who have been active in the last N seconds."""
+def get_active_users(profile_id, timeout_hours=2):
+    """Get users who have been active in the last N hours, with their role and activity status."""
     db = get_db()
     cursor = db.cursor()
 
     try:
         cursor.execute(
-            """SELECT pa.user_id, u.username, u.display_name
+            """SELECT pa.user_id, u.username, u.display_name, pm.role,
+                      pa.last_seen_at,
+                      TIMESTAMPDIFF(SECOND, pa.last_seen_at, NOW()) as seconds_ago
                FROM profile_activity pa
                JOIN user u ON pa.user_id = u.id
+               JOIN profile_member pm ON pm.profile_id = pa.profile_id AND pm.user_id = pa.user_id
                WHERE pa.profile_id = %s
-                 AND pa.last_seen_at > DATE_SUB(NOW(), INTERVAL %s SECOND)
+                 AND pa.last_seen_at > DATE_SUB(NOW(), INTERVAL %s HOUR)
                ORDER BY pa.last_seen_at DESC""",
-            (profile_id, timeout_seconds)
+            (profile_id, timeout_hours)
         )
         return cursor.fetchall()
     finally:
@@ -880,13 +883,13 @@ def get_active_users(profile_id, timeout_seconds=30):
 
 
 def cleanup_old_activity():
-    """Remove activity records older than 5 minutes."""
+    """Remove activity records older than 2 hours."""
     db = get_db()
     cursor = db.cursor()
 
     try:
         cursor.execute(
-            "DELETE FROM profile_activity WHERE last_seen_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+            "DELETE FROM profile_activity WHERE last_seen_at < DATE_SUB(NOW(), INTERVAL 2 HOUR)"
         )
         db.commit()
     finally:

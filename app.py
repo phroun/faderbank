@@ -402,12 +402,14 @@ def api_get_profile_state(user, profile_id):
             'display_name': resp.get('display_name') or resp.get('username')
         }
 
-    # Get active users (seen in last 30 seconds)
-    active_users_list = get_active_users(profile_id, timeout_seconds=30)
+    # Get active users (seen in last 2 hours)
+    active_users_list = get_active_users(profile_id, timeout_hours=2)
     active_users = {}
     for u in active_users_list:
         active_users[str(u['user_id'])] = {
-            'display_name': u.get('display_name') or u.get('username')
+            'display_name': u.get('display_name') or u.get('username'),
+            'role': u.get('role'),
+            'seconds_ago': u.get('seconds_ago', 0)
         }
 
     return jsonify({
