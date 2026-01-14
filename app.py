@@ -367,7 +367,7 @@ def api_create_channel(user, profile_id):
     if role not in ['owner', 'admin', 'technician']:
         return jsonify({'error': 'Insufficient permissions'}), 403
 
-    data = request.get_json()
+    data = request.get_json() or {}
 
     # Get current max position
     channels = get_channel_strips(profile_id)
@@ -386,10 +386,12 @@ def api_create_channel(user, profile_id):
         max_level=data.get('max_level', 127)
     )
 
-    channel = get_channel_strip(channel_id)
-
-    # Notify all users in the room
-    socketio.emit('channel_added', {'channel': dict(channel)}, room=f'profile_{profile_id}')
+    # Notify all users in the room (non-fatal if it fails under mod_wsgi)
+    try:
+        channel = get_channel_strip(channel_id)
+        socketio.emit('channel_added', {'channel': dict(channel)}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit channel_added: {e}")
 
     return jsonify({'success': True, 'channel_id': channel_id})
 
