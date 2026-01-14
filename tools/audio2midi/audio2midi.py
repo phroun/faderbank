@@ -27,9 +27,9 @@ except ImportError:
     sys.exit(1)
 
 try:
-    import rtmidi
+    import pygame.midi
 except ImportError:
-    print("Error: python-rtmidi not installed. Run: pip install python-rtmidi")
+    print("Error: pygame not installed. Run: pip install pygame")
     sys.exit(1)
 
 
@@ -68,22 +68,32 @@ class AudioToMidi:
 
     def start(self):
         # Initialize MIDI output
-        self.midi_out = rtmidi.MidiOut()
-        available_ports = self.midi_out.get_ports()
+        pygame.midi.init()
 
+        # Find matching output port
         port_index = None
-        for i, port in enumerate(available_ports):
-            if self.midi_port.lower() in port.lower():
+        port_name = None
+        for i in range(pygame.midi.get_count()):
+            info = pygame.midi.get_device_info(i)
+            # info = (interface, name, is_input, is_output, opened)
+            name = info[1].decode('utf-8')
+            is_output = info[3]
+            if is_output and self.midi_port.lower() in name.lower():
                 port_index = i
+                port_name = name
                 break
 
         if port_index is None:
             print(f"Error: MIDI port '{self.midi_port}' not found.")
-            print("Available ports:", available_ports)
+            print("Available output ports:")
+            for i in range(pygame.midi.get_count()):
+                info = pygame.midi.get_device_info(i)
+                if info[3]:  # is_output
+                    print(f"  {info[1].decode('utf-8')}")
             sys.exit(1)
 
-        self.midi_out.open_port(port_index)
-        print(f"Opened MIDI port: {available_ports[port_index]}")
+        self.midi_out = pygame.midi.Output(port_index)
+        print(f"Opened MIDI port: {port_name}")
 
         # Find audio device
         devices = sd.query_devices()
@@ -203,9 +213,9 @@ class AudioToMidi:
                 self.last_cc_values[audio_ch] = cc_value
 
     def send_cc(self, cc_number, value):
-        # MIDI CC message: [0xB0 + channel, cc_number, value]
-        message = [0xB0 + self.midi_channel, cc_number, value]
-        self.midi_out.send_message(message)
+        # MIDI CC message: status = 0xB0 + channel
+        status = 0xB0 + self.midi_channel
+        self.midi_out.write_short(status, cc_number, value)
 
     def stop(self):
         self.running = False
@@ -213,7 +223,8 @@ class AudioToMidi:
             self.stream.stop()
             self.stream.close()
         if self.midi_out:
-            self.midi_out.close_port()
+            self.midi_out.close()
+        pygame.midi.quit()
         print("\nStopped.")
 
 
@@ -230,13 +241,20 @@ def list_audio_devices():
 def list_midi_ports():
     print("MIDI Output Ports:")
     print("-" * 60)
-    midi_out = rtmidi.MidiOut()
-    ports = midi_out.get_ports()
-    for i, port in enumerate(ports):
-        print(f"  [{i}] {port}")
-    if not ports:
+    pygame.midi.init()
+    found = False
+    for i in range(pygame.midi.get_count()):
+        info = pygame.midi.get_device_info(i)
+        # info = (interface, name, is_input, is_output, opened)
+        name = info[1].decode('utf-8')
+        is_output = info[3]
+        if is_output:
+            print(f"  [{i}] {name}")
+            found = True
+    if not found:
         print("  No MIDI output ports found.")
         print("  On macOS, enable IAC Driver in Audio MIDI Setup.")
+    pygame.midi.quit()
 
 
 def parse_channel_mappings(mapping_str):
