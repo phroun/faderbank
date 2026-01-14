@@ -131,11 +131,50 @@ def debug():
     })
 
 
+@app.route('/debug/auth')
+def debug_auth():
+    """Debug auth without database sync."""
+    import requests as req
+    zebby_session = request.cookies.get('zebby_session')
+
+    if not zebby_session:
+        return jsonify({'error': 'No zebby_session cookie', 'logged_in': False})
+
+    try:
+        response = req.get(
+            'https://zebby.org/api/user/info',
+            cookies={'zebby_session': zebby_session}
+        )
+        if response.status_code != 200:
+            return jsonify({'error': f'API returned {response.status_code}', 'logged_in': False})
+
+        user_data = response.json()
+        return jsonify({'logged_in': True, 'user': user_data})
+    except Exception as e:
+        return jsonify({'error': str(e), 'logged_in': False})
+
+
 @app.route('/debug/redirect')
 def debug_redirect():
     """Test the actual redirect."""
     return_url = request.script_root + '/'
     return redirect(f'/login?return_to={return_url}')
+
+
+@app.route('/debug/db')
+def debug_db():
+    """Test database connection."""
+    try:
+        from config.db import get_db
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        cursor.close()
+        db.close()
+        return jsonify({'db_connected': True, 'result': result})
+    except Exception as e:
+        return jsonify({'db_connected': False, 'error': str(e)})
 
 
 @app.route('/')
