@@ -8,9 +8,10 @@ Usage:
     python audio2midi.py --list-audio          # List audio devices
     python audio2midi.py --list-midi           # List MIDI outputs
     python audio2midi.py -a DEVICE -c 0:1,1:2  # Map audio ch 0->CC 1, ch 1->CC 2
+    python audio2midi.py -a DEVICE -c 0:1:40   # Map ch 0->CC 1 with +40dB gain
 
 Example:
-    python audio2midi.py -a "Built-in Microphone" -m "IAC Driver Bus 1" -c 0:1,1:2 --midi-channel 1
+    python audio2midi.py -a "Built-in Microphone" -m "IAC Driver Bus 1" -c 0:1:30,1:2:30 --midi-channel 1
 """
 
 import argparse
@@ -39,7 +40,7 @@ class AudioToMidi:
                  attack_ms=10, release_ms=300, avg_window=8, gain_db=0, min_db=-60, debug=False):
         self.audio_device = audio_device
         self.midi_port = midi_port
-        self.channel_mappings = channel_mappings  # {audio_ch: cc_number}
+        self.channel_mappings = channel_mappings  # {audio_ch: (cc_number, gain_db)}
         self.midi_channel = midi_channel - 1  # Convert to 0-indexed
         self.sample_rate = sample_rate
         self.block_size = block_size
@@ -47,7 +48,7 @@ class AudioToMidi:
         self.attack_ms = attack_ms
         self.release_ms = release_ms
         self.avg_window = avg_window  # Number of RMS readings to average
-        self.gain_db = gain_db  # Input gain in dB
+        self.global_gain_db = gain_db  # Global input gain in dB (fallback)
         self.min_db = min_db  # Minimum dB level (floor)
         self.debug = debug
         self.debug_counter = 0
@@ -138,10 +139,17 @@ class AudioToMidi:
         )
         self.stream.start()
 
-        print(f"Mapping: {', '.join(f'ch{ch}->CC{cc}' for ch, cc in self.channel_mappings.items())}")
+        # Build mapping display with per-channel gains
+        mapping_parts = []
+        for ch, (cc, ch_gain) in self.channel_mappings.items():
+            if ch_gain is not None:
+                mapping_parts.append(f"ch{ch}->CC{cc} ({ch_gain:+.0f}dB)")
+            else:
+                mapping_parts.append(f"ch{ch}->CC{cc}")
+        print(f"Mapping: {', '.join(mapping_parts)}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
-        if self.gain_db != 0:
-            print(f"Input Gain: {self.gain_db:+.1f} dB")
+        if self.global_gain_db != 0:
+            print(f"Global Gain: {self.global_gain_db:+.1f} dB")
         print(f"Level Range: {self.min_db:.0f} dB to 0 dB")
         if self.debug:
             print("Debug mode: ON")
@@ -153,9 +161,12 @@ class AudioToMidi:
 
         now = time.time() * 1000  # ms
 
-        for audio_ch, cc_num in self.channel_mappings.items():
+        for audio_ch, (cc_num, ch_gain_db) in self.channel_mappings.items():
             if audio_ch >= indata.shape[1]:
                 continue
+
+            # Use per-channel gain if specified, otherwise global gain
+            gain_db = ch_gain_db if ch_gain_db is not None else self.global_gain_db
 
             # Calculate RMS level for this channel
             channel_data = indata[:, audio_ch]
@@ -171,7 +182,7 @@ class AudioToMidi:
 
             # Convert to dB and apply gain
             if avg_rms > 0:
-                db = 20 * np.log10(avg_rms) + self.gain_db
+                db = 20 * np.log10(avg_rms) + gain_db
             else:
                 db = self.min_db
 
@@ -274,15 +285,19 @@ def list_midi_ports():
 
 
 def parse_channel_mappings(mapping_str):
-    """Parse channel mappings like '0:1,1:2,2:3' into {0: 1, 1: 2, 2: 3}"""
+    """Parse channel mappings like '0:1,1:2' or '0:1:40,1:2:30' (with per-channel gain).
+
+    Returns {audio_ch: (cc_num, gain_db)} where gain_db is None if not specified.
+    """
     mappings = {}
     for pair in mapping_str.split(','):
         parts = pair.strip().split(':')
-        if len(parts) != 2:
-            raise ValueError(f"Invalid mapping: {pair}")
+        if len(parts) < 2 or len(parts) > 3:
+            raise ValueError(f"Invalid mapping: {pair} (expected ch:cc or ch:cc:gain)")
         audio_ch = int(parts[0])
         cc_num = int(parts[1])
-        mappings[audio_ch] = cc_num
+        gain_db = float(parts[2]) if len(parts) == 3 else None
+        mappings[audio_ch] = (cc_num, gain_db)
     return mappings
 
 
@@ -292,10 +307,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s --list-audio                    List audio input devices
-  %(prog)s --list-midi                     List MIDI output ports
-  %(prog)s -a 0 -m "IAC" -c 0:1            Map audio ch 0 to CC 1
-  %(prog)s -a "Mic" -m "IAC" -c 0:1,1:2    Map ch 0->CC1, ch 1->CC2
+  %(prog)s --list-audio                       List audio input devices
+  %(prog)s --list-midi                        List MIDI output ports
+  %(prog)s -a 0 -m "IAC" -c 0:1               Map audio ch 0 to CC 1
+  %(prog)s -a "Mic" -m "IAC" -c 0:1,1:2       Map ch 0->CC1, ch 1->CC2
+  %(prog)s -a "Mic" -m "IAC" -c 0:1:40,1:2:30 Per-channel gain (+40dB, +30dB)
         """
     )
 
@@ -308,7 +324,7 @@ Examples:
     parser.add_argument('-m', '--midi-port', type=str,
                         help='MIDI output port name (partial match OK)')
     parser.add_argument('-c', '--channels', type=str,
-                        help='Channel mappings as audio_ch:cc_num,... (e.g., 0:1,1:2)')
+                        help='Channel mappings as ch:cc[:gain],... (e.g., 0:1,1:2 or 0:1:40,1:2:30)')
     parser.add_argument('--midi-channel', type=int, default=1,
                         help='MIDI channel (1-16, default: 1)')
     parser.add_argument('--sample-rate', type=int, default=44100,
