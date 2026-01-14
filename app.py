@@ -19,7 +19,7 @@ from database import (
     redeem_activation_link, cancel_activation_link, get_profile_activation_links,
     get_channel_strips, get_channel_strip, create_channel_strip, update_channel_strip,
     delete_channel_strip, reorder_channel_strips, update_fader_level,
-    update_mute_state, update_solo_state,
+    update_mute_state, update_solo_state, update_vu_levels_bulk,
     get_responsibility, take_responsibility, drop_responsibility,
     update_profile_activity, get_active_users
 )
@@ -389,7 +389,8 @@ def api_get_profile_state(user, profile_id):
             'current_level': ch['current_level'],
             'is_muted': bool(ch['is_muted']),
             'is_solo': bool(ch['is_solo']),
-            'version': ch.get('state_version') or 0
+            'version': ch.get('state_version') or 0,
+            'vu_level': ch.get('vu_level') or 0
         })
 
     # Get responsibility info
@@ -489,6 +490,25 @@ def api_toggle_channel_solo(user, channel_id):
     new_version = updated.get('state_version') or 0
 
     return jsonify({'success': True, 'is_solo': is_solo, 'version': new_version})
+
+
+@app.route('/api/profile/<int:profile_id>/vu', methods=['POST'])
+@require_login
+def api_update_vu_levels(user, profile_id):
+    """Update VU levels for multiple channels (called by device receiving MIDI)."""
+    role = get_user_role(profile_id, user['user_id'])
+    if not role:
+        return jsonify({'error': 'Access denied'}), 403
+
+    data = request.get_json() or {}
+    vu_data = data.get('levels', {})
+
+    if vu_data:
+        # Convert string keys to int if needed
+        vu_dict = {int(k): v for k, v in vu_data.items()}
+        update_vu_levels_bulk(profile_id, vu_dict)
+
+    return jsonify({'success': True})
 
 
 @app.route('/api/profile/<int:profile_id>/responsibility/take', methods=['POST'])

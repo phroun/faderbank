@@ -61,6 +61,12 @@
     const vuPeaks = {};  // channel_id -> {peak, lastUpdate}
     const VU_PEAK_INTERVAL = 100;  // 100ms
 
+    // VU broadcast buffer (for sending to server)
+    const vuBuffer = {};  // channel_id -> level
+    let vuBroadcastTimer = null;
+    const VU_BROADCAST_INTERVAL = 100;  // Send VU updates every 100ms
+    const localVuChannels = new Set();  // Channels receiving local MIDI VU (don't overwrite from polling)
+
     // Polling state
     const POLL_INTERVAL = 500;  // Poll every 500ms
     let pollTimer = null;
@@ -135,33 +141,41 @@
                 const serverVersion = update.version || 0;
                 const localVersion = channelVersions[channel.id] || 0;
 
-                // Only apply if server has newer version
-                if (serverVersion <= localVersion) continue;
+                // Only apply versioned state if server has newer version
+                if (serverVersion > localVersion) {
+                    // Update our tracked version
+                    channelVersions[channel.id] = serverVersion;
 
-                // Update our tracked version
-                channelVersions[channel.id] = serverVersion;
+                    // Only update fader if we're not currently dragging it
+                    if (activeFader !== channel) {
+                        if (channel.current_level !== update.current_level) {
+                            channel.current_level = update.current_level;
+                            needsRender = true;
+                            sendMidiFader(channel);
+                        }
+                    }
 
-                // Only update fader if we're not currently dragging it
-                if (activeFader !== channel) {
-                    if (channel.current_level !== update.current_level) {
-                        channel.current_level = update.current_level;
+                    if (channel.is_muted !== update.is_muted) {
+                        channel.is_muted = update.is_muted;
                         needsRender = true;
-                        sendMidiFader(channel);
+                        needsMidiRecalc = true;
+                        sendMidiMute(channel);
+                    }
+
+                    if (channel.is_solo !== update.is_solo) {
+                        channel.is_solo = update.is_solo;
+                        needsRender = true;
+                        needsMidiRecalc = true;
+                        sendMidiSolo(channel);
                     }
                 }
 
-                if (channel.is_muted !== update.is_muted) {
-                    channel.is_muted = update.is_muted;
-                    needsRender = true;
-                    needsMidiRecalc = true;
-                    sendMidiMute(channel);
-                }
-
-                if (channel.is_solo !== update.is_solo) {
-                    channel.is_solo = update.is_solo;
-                    needsRender = true;
-                    needsMidiRecalc = true;
-                    sendMidiSolo(channel);
+                // VU levels: always apply from server unless this channel receives local MIDI VU
+                if (update.vu_level !== undefined && !localVuChannels.has(channel.id)) {
+                    if (channel.vu_level !== update.vu_level) {
+                        channel.vu_level = update.vu_level;
+                        needsRender = true;
+                    }
                 }
             }
         }
@@ -997,19 +1011,46 @@
         const peak = vuPeaks[channel.id];
         peak.peak = Math.max(peak.peak, value);
 
+        // Mark this channel as receiving local VU (don't overwrite from polling)
+        localVuChannels.add(channel.id);
+
         // Send peak every 100ms
         if (now - peak.lastUpdate >= VU_PEAK_INTERVAL) {
             channel.vu_level = peak.peak;
 
-            // Broadcast to other users
-            socket.emit('vu_level', {
-                channel_id: channel.id,
-                level: peak.peak
-            });
+            // Buffer for broadcast to server
+            vuBuffer[channel.id] = peak.peak;
+            scheduleVuBroadcast();
 
             peak.peak = 0;
             peak.lastUpdate = now;
         }
+    }
+
+    function scheduleVuBroadcast() {
+        if (vuBroadcastTimer) return;  // Already scheduled
+
+        vuBroadcastTimer = setTimeout(async () => {
+            vuBroadcastTimer = null;
+
+            // Send buffered VU levels to server
+            if (Object.keys(vuBuffer).length > 0) {
+                try {
+                    await fetch(`${window.BASE_URL}/api/profile/${config.profileId}/vu`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ levels: vuBuffer })
+                    });
+                } catch (err) {
+                    // Silently ignore VU broadcast errors
+                }
+
+                // Clear buffer after sending
+                for (const key in vuBuffer) {
+                    delete vuBuffer[key];
+                }
+            }
+        }, VU_BROADCAST_INTERVAL);
     }
 
     // ==========================================================================

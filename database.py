@@ -662,6 +662,39 @@ def update_solo_state(channel_id, is_solo):
         db.close()
 
 
+def update_vu_level(channel_id, level):
+    """Update VU meter level (no version increment - ephemeral data)."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            "UPDATE channel_strip SET vu_level = %s WHERE id = %s",
+            (level, channel_id)
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def update_vu_levels_bulk(profile_id, vu_data):
+    """Update multiple VU levels at once. vu_data is {channel_id: level}."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        for channel_id, level in vu_data.items():
+            cursor.execute(
+                "UPDATE channel_strip SET vu_level = %s WHERE id = %s AND profile_id = %s",
+                (level, channel_id, profile_id)
+            )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
+
+
 # =============================================================================
 # Responsibility System
 # =============================================================================
