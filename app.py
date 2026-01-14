@@ -116,6 +116,18 @@ def slugify(text):
 # Main Routes
 # =============================================================================
 
+@app.route('/debug')
+def debug():
+    """Debug route to check request values."""
+    return jsonify({
+        'script_root': request.script_root,
+        'path': request.path,
+        'full_path': request.full_path,
+        'url': request.url,
+        'combined': request.script_root + request.path
+    })
+
+
 @app.route('/')
 def index():
     """Home page - show user's profiles or login prompt."""
