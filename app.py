@@ -122,7 +122,8 @@ def index():
     user = get_zebby_user_info()
 
     if not user:
-        return redirect(f'/login?return_to=/{SERVICE_KEY}/')
+        return_url = request.script_root + request.path
+        return redirect(f'/login?return_to={return_url}')
 
     track_service_access()
     profiles = get_user_profiles(user['user_id'])
