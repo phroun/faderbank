@@ -177,6 +177,12 @@
             }
         }
 
+        // Update online users from polling
+        if (data.online_users !== undefined) {
+            onlineUsers = data.online_users;
+            updateOnlineUsersList();
+        }
+
         if (needsMidiRecalc) {
             recalculateMidiOutputs();
         }
@@ -1106,6 +1112,9 @@
             takeBtn.style.display = config.canOperate ? 'inline-flex' : 'none';
             dropBtn.style.display = 'none';
         }
+
+        // Also update online users list to sync responsibility emoji
+        updateOnlineUsersList();
     }
 
     // ==========================================================================

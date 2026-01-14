@@ -801,3 +801,61 @@ def cleanup_old_sessions():
     finally:
         cursor.close()
         db.close()
+
+
+# =============================================================================
+# Profile Activity Tracking (for online users list)
+# =============================================================================
+
+def update_profile_activity(profile_id, user_id):
+    """Update user's last seen time for a profile."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            """INSERT INTO profile_activity (profile_id, user_id, last_seen_at)
+               VALUES (%s, %s, NOW())
+               ON DUPLICATE KEY UPDATE last_seen_at = NOW()""",
+            (profile_id, user_id)
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def get_active_users(profile_id, timeout_seconds=30):
+    """Get users who have been active in the last N seconds."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            """SELECT pa.user_id, u.username, u.display_name
+               FROM profile_activity pa
+               JOIN user u ON pa.user_id = u.id
+               WHERE pa.profile_id = %s
+                 AND pa.last_seen_at > DATE_SUB(NOW(), INTERVAL %s SECOND)
+               ORDER BY pa.last_seen_at DESC""",
+            (profile_id, timeout_seconds)
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        db.close()
+
+
+def cleanup_old_activity():
+    """Remove activity records older than 5 minutes."""
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(
+            "DELETE FROM profile_activity WHERE last_seen_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()

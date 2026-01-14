@@ -85,6 +85,16 @@ CREATE TABLE profile_responsibility (
     FOREIGN KEY (user_id) REFERENCES user(id)
 );
 
+-- Track active users per profile (for online users list)
+CREATE TABLE profile_activity (
+    profile_id INT NOT NULL,
+    user_id INT NOT NULL,
+    last_seen_at DATETIME NOT NULL,
+    PRIMARY KEY (profile_id, user_id),
+    FOREIGN KEY (profile_id) REFERENCES profile(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES user(id)
+);
+
 -- Session table for ephemeral data
 CREATE TABLE session (
     session_id VARCHAR(255) PRIMARY KEY,

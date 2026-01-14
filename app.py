@@ -20,7 +20,8 @@ from database import (
     get_channel_strips, get_channel_strip, create_channel_strip, update_channel_strip,
     delete_channel_strip, reorder_channel_strips, update_fader_level,
     update_mute_state, update_solo_state,
-    get_responsibility, take_responsibility, drop_responsibility
+    get_responsibility, take_responsibility, drop_responsibility,
+    update_profile_activity, get_active_users
 )
 
 app = Flask(__name__)
@@ -375,6 +376,9 @@ def api_get_profile_state(user, profile_id):
     if not role:
         return jsonify({'error': 'Access denied'}), 403
 
+    # Record this user's activity (for online users tracking)
+    update_profile_activity(profile_id, user['user_id'])
+
     channels = get_channel_strips(profile_id)
 
     # Convert to JSON-safe format (handle datetime fields)
@@ -397,9 +401,18 @@ def api_get_profile_state(user, profile_id):
             'display_name': resp.get('display_name') or resp.get('username')
         }
 
+    # Get active users (seen in last 30 seconds)
+    active_users_list = get_active_users(profile_id, timeout_seconds=30)
+    active_users = {}
+    for u in active_users_list:
+        active_users[str(u['user_id'])] = {
+            'display_name': u.get('display_name') or u.get('username')
+        }
+
     return jsonify({
         'channels': channel_states,
-        'responsibility': responsibility
+        'responsibility': responsibility,
+        'online_users': active_users
     })
 
 
