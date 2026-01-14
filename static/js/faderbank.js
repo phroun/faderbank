@@ -66,6 +66,7 @@
     let vuBroadcastTimer = null;
     const VU_BROADCAST_INTERVAL = 100;  // Send VU updates every 100ms
     const localVuChannels = new Set();  // Channels receiving local MIDI VU (don't overwrite from polling)
+    const lastReceivedVu = {};  // channel_id -> last received VU level (for stuck signal detection)
 
     // Polling state
     const POLL_INTERVAL = 500;  // Poll every 500ms
@@ -170,12 +171,23 @@
                     }
                 }
 
-                // VU levels: always apply from server unless this channel receives local MIDI VU
+                // VU levels: apply from server unless this channel receives local MIDI VU
+                // Only update if the received level changed (allows stuck signals to decay)
                 if (update.vu_level !== undefined && !localVuChannels.has(channel.id)) {
-                    if (channel.vu_level !== update.vu_level) {
-                        channel.vu_level = update.vu_level;
-                        needsRender = true;
+                    const prevReceived = lastReceivedVu[channel.id];
+                    const newReceived = update.vu_level;
+
+                    // Only update display if the received value changed from last time
+                    if (prevReceived !== newReceived) {
+                        lastReceivedVu[channel.id] = newReceived;
+                        // Only set if new level is higher than current (decayed) level,
+                        // or if we need to show the new value
+                        if (newReceived > channel.vu_level || channel.vu_level === 0) {
+                            channel.vu_level = newReceived;
+                            needsRender = true;
+                        }
                     }
+                    // If received level is same as before, let decay continue naturally
                 }
             }
         }
