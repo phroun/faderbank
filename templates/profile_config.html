@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Configure {{ profile.name }} - Faderbank{% endblock %}
+
+{% block nav %}
+<nav class="profile-nav">
+    <a href="{{ url_for('view_profile', slug=profile.slug) }}" class="nav-link">&larr; Back to {{ profile.name }}</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>Configure Channels</h1>
+        <button id="btn-add-channel" class="btn btn-primary">Add Channel</button>
+    </div>
+
+    <div id="channels-list" class="channels-config-list">
+        {% for channel in channels %}
+        <div class="channel-config-item" data-channel-id="{{ channel.id }}">
+            <div class="channel-drag-handle">&#9776;</div>
+            <div class="channel-color-indicator" style="background-color: {{ channel.color }};"></div>
+            <div class="channel-config-main">
+                <input type="text" class="channel-name" value="{{ channel.name }}" placeholder="Channel name">
+            </div>
+            <div class="channel-config-details">
+                <div class="config-field">
+                    <label>Color</label>
+                    <select class="channel-color">
+                        {% for color in ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'white'] %}
+                        <option value="{{ color }}" {% if channel.color == color %}selected{% endif %}>{{ color|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label>Fader CC</label>
+                    <input type="number" class="channel-cc-output" value="{{ channel.midi_cc_output }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>VU CC</label>
+                    <input type="number" class="channel-cc-vu" value="{{ channel.midi_cc_vu_input or '' }}" min="0" max="127" placeholder="None">
+                </div>
+                <div class="config-field">
+                    <label>Mute CC</label>
+                    <input type="number" class="channel-cc-mute" value="{{ channel.midi_cc_mute or '' }}" min="0" max="127" placeholder="None">
+                </div>
+                <div class="config-field">
+                    <label>Solo CC</label>
+                    <input type="number" class="channel-cc-solo" value="{{ channel.midi_cc_solo or '' }}" min="0" max="127" placeholder="None">
+                </div>
+                <div class="config-field">
+                    <label>Min</label>
+                    <input type="number" class="channel-min" value="{{ channel.min_level }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>Max</label>
+                    <input type="number" class="channel-max" value="{{ channel.max_level }}" min="0" max="127">
+                </div>
+            </div>
+            <div class="channel-config-actions">
+                <button class="btn btn-small btn-save-channel">Save</button>
+                <button class="btn btn-small btn-danger btn-delete-channel">Delete</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if role in ['owner', 'admin'] %}
+    <hr>
+    <h2>Members</h2>
+    <div class="members-list">
+        {% for member in members %}
+        <div class="member-item" data-user-id="{{ member.user_id }}">
+            <span class="member-name">{{ member.display_name or member.username }}</span>
+            <span class="member-role role-{{ member.role }}">{{ member.role }}</span>
+            {% if member.role != 'owner' %}
+            <select class="member-role-select" {% if role == 'admin' and member.role == 'admin' %}disabled{% endif %}>
+                {% if role == 'owner' %}
+                <option value="admin" {% if member.role == 'admin' %}selected{% endif %}>Admin</option>
+                {% endif %}
+                <option value="technician" {% if member.role == 'technician' %}selected{% endif %}>Technician</option>
+                <option value="operator" {% if member.role == 'operator' %}selected{% endif %}>Operator</option>
+                <option value="guest" {% if member.role == 'guest' %}selected{% endif %}>Guest</option>
+            </select>
+            <button class="btn btn-small btn-danger btn-remove-member"
+                    {% if role == 'admin' and member.role == 'admin' %}disabled{% endif %}>Remove</button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <hr>
+    <h2>Invitation Links</h2>
+    <div class="invite-section">
+        <div class="invite-create">
+            <select id="invite-role">
+                {% if role == 'owner' %}
+                <option value="admin">Admin</option>
+                {% endif %}
+                <option value="technician">Technician</option>
+                <option value="operator">Operator</option>
+                <option value="guest" selected>Guest</option>
+            </select>
+            <button id="btn-create-invite" class="btn btn-primary">Create Invite Link</button>
+        </div>
+        <div id="invite-result" class="invite-result" style="display:none;">
+            <input type="text" id="invite-url" readonly>
+            <button id="btn-copy-invite" class="btn btn-small">Copy</button>
+        </div>
+    </div>
+
+    <div class="invite-list">
+        <h3>Active Links</h3>
+        {% for link in activation_links %}
+        {% if not link.used_at and not link.canceled_at and link.expires_at > now() %}
+        <div class="invite-item" data-link-id="{{ link.id }}">
+            <span class="invite-role role-{{ link.role }}">{{ link.role }}</span>
+            <span class="invite-created">Created by {{ link.creator_name }}</span>
+            <span class="invite-expires">Expires {{ link.expires_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            <button class="btn btn-small btn-danger btn-cancel-invite">Cancel</button>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const profileId = {{ profile.id }};
+const profileSlug = '{{ profile.slug }}';
+
+// Channel management
+document.getElementById('btn-add-channel').addEventListener('click', async () => {
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/channel`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to add channel');
+        }
+    } catch (e) {
+        alert('Error adding channel');
+    }
+});
+
+document.querySelectorAll('.btn-save-channel').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const item = this.closest('.channel-config-item');
+        const channelId = item.dataset.channelId;
+
+        const data = {
+            name: item.querySelector('.channel-name').value,
+            color: item.querySelector('.channel-color').value,
+            midi_cc_output: parseInt(item.querySelector('.channel-cc-output').value) || 0,
+            midi_cc_vu_input: parseInt(item.querySelector('.channel-cc-vu').value) || null,
+            midi_cc_mute: parseInt(item.querySelector('.channel-cc-mute').value) || null,
+            midi_cc_solo: parseInt(item.querySelector('.channel-cc-solo').value) || null,
+            min_level: parseInt(item.querySelector('.channel-min').value) || 0,
+            max_level: parseInt(item.querySelector('.channel-max').value) || 127
+        };
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/channel/${channelId}/update`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                item.querySelector('.channel-color-indicator').style.backgroundColor = data.color;
+                this.textContent = 'Saved!';
+                setTimeout(() => this.textContent = 'Save', 1500);
+            } else {
+                alert(result.error || 'Failed to save');
+            }
+        } catch (e) {
+            alert('Error saving channel');
+        }
+    });
+});
+
+document.querySelectorAll('.btn-delete-channel').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        if (!confirm('Delete this channel?')) return;
+
+        const item = this.closest('.channel-config-item');
+        const channelId = item.dataset.channelId;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/channel/${channelId}/delete`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                item.remove();
+            } else {
+                alert(result.error || 'Failed to delete');
+            }
+        } catch (e) {
+            alert('Error deleting channel');
+        }
+    });
+});
+
+// Member management
+document.querySelectorAll('.member-role-select').forEach(select => {
+    select.addEventListener('change', async function() {
+        const item = this.closest('.member-item');
+        const userId = item.dataset.userId;
+        const newRole = this.value;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/profile/${profileId}/member/${userId}/role`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({role: newRole})
+            });
+            const result = await response.json();
+            if (!result.success) {
+                alert(result.error || 'Failed to update role');
+                location.reload();
+            }
+        } catch (e) {
+            alert('Error updating role');
+        }
+    });
+});
+
+document.querySelectorAll('.btn-remove-member').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        if (!confirm('Remove this member?')) return;
+
+        const item = this.closest('.member-item');
+        const userId = item.dataset.userId;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/profile/${profileId}/member/${userId}/remove`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                item.remove();
+            } else {
+                alert(result.error || 'Failed to remove');
+            }
+        } catch (e) {
+            alert('Error removing member');
+        }
+    });
+});
+
+// Invitation links
+document.getElementById('btn-create-invite')?.addEventListener('click', async () => {
+    const role = document.getElementById('invite-role').value;
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/invite`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({role: role})
+        });
+        const result = await response.json();
+        if (result.success) {
+            document.getElementById('invite-url').value = result.url;
+            document.getElementById('invite-result').style.display = 'flex';
+        } else {
+            alert(result.error || 'Failed to create invite');
+        }
+    } catch (e) {
+        alert('Error creating invite');
+    }
+});
+
+document.getElementById('btn-copy-invite')?.addEventListener('click', () => {
+    const input = document.getElementById('invite-url');
+    input.select();
+    document.execCommand('copy');
+    document.getElementById('btn-copy-invite').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('btn-copy-invite').textContent = 'Copy', 1500);
+});
+
+document.querySelectorAll('.btn-cancel-invite').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        if (!confirm('Cancel this invitation link?')) return;
+
+        const item = this.closest('.invite-item');
+        const linkId = item.dataset.linkId;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/invite/${linkId}/cancel`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            if (result.success) {
+                item.remove();
+            } else {
+                alert(result.error || 'Failed to cancel');
+            }
+        } catch (e) {
+            alert('Error canceling invite');
+        }
+    });
+});
+
+// Drag and drop reordering
+let draggedItem = null;
+
+document.querySelectorAll('.channel-drag-handle').forEach(handle => {
+    const item = handle.closest('.channel-config-item');
+
+    item.setAttribute('draggable', 'true');
+
+    item.addEventListener('dragstart', (e) => {
+        draggedItem = item;
+        item.classList.add('dragging');
+    });
+
+    item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        draggedItem = null;
+        saveOrder();
+    });
+
+    item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (draggedItem && draggedItem !== item) {
+            const list = document.getElementById('channels-list');
+            const items = [...list.querySelectorAll('.channel-config-item:not(.dragging)')];
+            const nextItem = items.find(i => {
+                const rect = i.getBoundingClientRect();
+                return e.clientY < rect.top + rect.height / 2;
+            });
+            if (nextItem) {
+                list.insertBefore(draggedItem, nextItem);
+            } else {
+                list.appendChild(draggedItem);
+            }
+        }
+    });
+});
+
+async function saveOrder() {
+    const items = document.querySelectorAll('.channel-config-item');
+    const order = [...items].map(item => parseInt(item.dataset.channelId));
+
+    try {
+        await fetch(`${BASE_URL}/api/profile/${profileId}/channels/reorder`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({order: order})
+        });
+    } catch (e) {
+        console.error('Error saving order', e);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - {{ profile.name }} - Faderbank{% endblock %}
+
+{% block nav %}
+<nav class="profile-nav">
+    <a href="{{ url_for('view_profile', slug=profile.slug) }}" class="nav-link">&larr; Back to {{ profile.name }}</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <h1>Profile Settings</h1>
+
+    <section class="settings-section">
+        <h2>Profile Details</h2>
+        <form id="profile-details-form" class="form">
+            <div class="form-group">
+                <label for="profile-name">Profile Name</label>
+                <input type="text" id="profile-name" value="{{ profile.name }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="profile-slug">URL Slug</label>
+                <div class="input-with-status">
+                    <input type="text" id="profile-slug" value="{{ profile.slug }}" required
+                           pattern="[a-z0-9-]+">
+                    <span id="slug-status" class="input-status"></span>
+                </div>
+                <small>Changing this will update the URL for all users.</small>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="settings-section">
+        <h2>Transfer Ownership</h2>
+        <p class="warning-text">Transfer ownership of this profile to another admin. You will become an admin.</p>
+
+        <form id="transfer-form" class="form">
+            <div class="form-group">
+                <label for="new-owner">New Owner</label>
+                <select id="new-owner">
+                    <option value="">Select a member...</option>
+                    {% for member in members %}
+                    {% if member.role == 'admin' %}
+                    <option value="{{ member.user_id }}">{{ member.display_name or member.username }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group" id="transfer-confirm-group" style="display:none;">
+                <label for="transfer-confirm">Type "TRANSFER" to confirm</label>
+                <input type="text" id="transfer-confirm" placeholder="TRANSFER">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-warning" disabled id="btn-transfer">Transfer Ownership</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="settings-section danger-zone">
+        <h2>Danger Zone</h2>
+
+        <div class="danger-action">
+            <div class="danger-info">
+                <h3>Delete Profile</h3>
+                <p>Permanently delete this profile and all its data. This cannot be undone.</p>
+            </div>
+            <button id="btn-show-delete" class="btn btn-danger">Delete Profile</button>
+        </div>
+
+        <div id="delete-confirm" style="display:none;">
+            <div class="form-group">
+                <label for="delete-confirm-input">Type "DELETE {{ profile.slug }}" to confirm</label>
+                <input type="text" id="delete-confirm-input" placeholder="DELETE {{ profile.slug }}">
+            </div>
+            <div class="form-actions">
+                <button id="btn-cancel-delete" class="btn btn-secondary">Cancel</button>
+                <button id="btn-delete" class="btn btn-danger" disabled>Permanently Delete</button>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const profileId = {{ profile.id }};
+const currentSlug = '{{ profile.slug }}';
+
+// Slug availability check
+const slugInput = document.getElementById('profile-slug');
+const slugStatus = document.getElementById('slug-status');
+let checkTimeout = null;
+
+slugInput.addEventListener('input', function() {
+    clearTimeout(checkTimeout);
+    const slug = this.value.trim().toLowerCase();
+
+    if (slug === currentSlug) {
+        slugStatus.textContent = '';
+        slugStatus.className = 'input-status';
+        return;
+    }
+
+    if (!slug) {
+        slugStatus.textContent = '';
+        slugStatus.className = 'input-status';
+        return;
+    }
+
+    slugStatus.textContent = 'Checking...';
+    slugStatus.className = 'input-status checking';
+
+    checkTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`${BASE_URL}/api/slug/check?slug=${encodeURIComponent(slug)}&exclude=${profileId}`);
+            const data = await response.json();
+
+            if (data.available) {
+                slugStatus.textContent = 'Available';
+                slugStatus.className = 'input-status available';
+            } else {
+                slugStatus.textContent = data.error || 'Not available';
+                slugStatus.className = 'input-status unavailable';
+            }
+        } catch (e) {
+            slugStatus.textContent = 'Error checking';
+            slugStatus.className = 'input-status error';
+        }
+    }, 300);
+});
+
+// Save profile details
+document.getElementById('profile-details-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const name = document.getElementById('profile-name').value.trim();
+    const slug = document.getElementById('profile-slug').value.trim().toLowerCase();
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/update`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, slug})
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            if (slug !== currentSlug) {
+                window.location.href = `${BASE_URL}/profile/${slug}/settings`;
+            } else {
+                alert('Saved!');
+            }
+        } else {
+            alert(result.error || 'Failed to save');
+        }
+    } catch (e) {
+        alert('Error saving');
+    }
+});
+
+// Transfer ownership
+const newOwnerSelect = document.getElementById('new-owner');
+const transferConfirmGroup = document.getElementById('transfer-confirm-group');
+const transferConfirmInput = document.getElementById('transfer-confirm');
+const btnTransfer = document.getElementById('btn-transfer');
+
+newOwnerSelect.addEventListener('change', function() {
+    if (this.value) {
+        transferConfirmGroup.style.display = 'block';
+    } else {
+        transferConfirmGroup.style.display = 'none';
+        btnTransfer.disabled = true;
+    }
+});
+
+transferConfirmInput.addEventListener('input', function() {
+    btnTransfer.disabled = this.value !== 'TRANSFER';
+});
+
+document.getElementById('transfer-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const newOwnerId = newOwnerSelect.value;
+    if (!newOwnerId || transferConfirmInput.value !== 'TRANSFER') return;
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/transfer`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({new_owner_id: parseInt(newOwnerId)})
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Ownership transferred. You are now an admin.');
+            window.location.href = `${BASE_URL}/profile/${currentSlug}`;
+        } else {
+            alert(result.error || 'Failed to transfer');
+        }
+    } catch (e) {
+        alert('Error transferring ownership');
+    }
+});
+
+// Delete profile
+const deleteConfirmInput = document.getElementById('delete-confirm-input');
+const btnDelete = document.getElementById('btn-delete');
+const deleteConfirmText = 'DELETE {{ profile.slug }}';
+
+document.getElementById('btn-show-delete').addEventListener('click', () => {
+    document.getElementById('delete-confirm').style.display = 'block';
+});
+
+document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+    document.getElementById('delete-confirm').style.display = 'none';
+    deleteConfirmInput.value = '';
+    btnDelete.disabled = true;
+});
+
+deleteConfirmInput.addEventListener('input', function() {
+    btnDelete.disabled = this.value !== deleteConfirmText;
+});
+
+btnDelete.addEventListener('click', async () => {
+    if (deleteConfirmInput.value !== deleteConfirmText) return;
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/delete`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            window.location.href = `${BASE_URL}/`;
+        } else {
+            alert(result.error || 'Failed to delete');
+        }
+    } catch (e) {
+        alert('Error deleting profile');
+    }
+});
+</script>
+{% endblock %}

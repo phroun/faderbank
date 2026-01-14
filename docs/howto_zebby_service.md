@@ -180,6 +180,41 @@ When authenticated, `get_zebby_user_info()` returns:
 3. Zebby handles the WebAuthn flow
 4. User is redirected back to `return_to` URL with valid `zebby_session` cookie
 
+### Important: Building the return_to URL
+
+When using `WSGIScriptAlias` to mount your app at a subpath (e.g., `/yourservice`), Flask's `request.path` only returns the path *relative* to the mount point, not the full path.
+
+For example, if your app is mounted at `/yourservice` and the user visits `/yourservice/dashboard`:
+- `request.path` returns `/dashboard` (not `/yourservice/dashboard`)
+- `request.url` returns the full URL but may cause issues if not URL-encoded
+
+**Use `request.script_root + request.path`** to get the correct full path:
+
+```python
+from functools import wraps
+
+def require_login(f):
+    """Decorator to require login."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = get_zebby_user_info()
+        if not user:
+            # request.script_root = '/yourservice' (the WSGIScriptAlias mount point)
+            # request.path = '/dashboard' (path relative to mount point)
+            # Combined = '/yourservice/dashboard'
+            return_url = request.script_root + request.path
+            return redirect(f'/login?return_to={return_url}')
+        return f(user=user, *args, **kwargs)
+    return decorated_function
+```
+
+| Method | Value at `/yourservice/dashboard` | Use Case |
+|--------|-----------------------------------|----------|
+| `request.path` | `/dashboard` | Within-app routing |
+| `request.script_root` | `/yourservice` | The WSGI mount point |
+| `request.script_root + request.path` | `/yourservice/dashboard` | Login return URLs |
+| `request.url` | `https://zebby.org/yourservice/dashboard` | Full URL (needs encoding) |
+
 ## Step 6: Database Schema
 
 Your service needs at minimum a `user` table to track users locally:
@@ -336,38 +371,90 @@ def guest_action():
 
 ## Step 7: Sync User to Local DB
 
-When a user accesses your service, update your local user table:
+When a user accesses your service, update your local user table. **Important:** Make database sync non-fatal so auth still works if the database is unavailable.
 
 ```python
-def get_zebby_user_info():
-    # ... after getting user_data from API ...
+import logging
 
+def get_zebby_user_info():
+    """Get user info from Zebby API. Returns None if not logged in."""
+    zebby_session = request.cookies.get('zebby_session')
+
+    if not zebby_session:
+        return None
+
+    try:
+        response = requests.get(
+            'https://zebby.org/api/user/info',
+            cookies={'zebby_session': zebby_session}
+        )
+
+        if response.status_code != 200:
+            return None
+
+        user_data = response.json()
+
+        # Sync user to local database (non-fatal if it fails)
+        try:
+            sync_user(user_data)
+        except Exception as e:
+            logging.error(f"Failed to sync user to database: {e}")
+
+        return user_data
+    except:
+        return None
+
+
+def sync_user(user_data):
+    """Sync Zebby user data to local database."""
     db = get_db()
     cursor = db.cursor()
 
-    cursor.execute(
-        """INSERT INTO user (id, last_active_at)
-           VALUES (%s, NOW())
-           ON DUPLICATE KEY UPDATE last_active_at = NOW()""",
-        (user_data['user_id'],)
-    )
-
-    db.commit()
-    cursor.close()
-    db.close()
-
-    return user_data
+    try:
+        cursor.execute(
+            """INSERT INTO user (id, last_active_at)
+               VALUES (%s, NOW())
+               ON DUPLICATE KEY UPDATE last_active_at = NOW()""",
+            (user_data['user_id'],)
+        )
+        db.commit()
+    finally:
+        cursor.close()
+        db.close()
 ```
+
+### Why Non-Fatal Database Sync?
+
+If the database sync is inside the main try/except block and throws an exception (e.g., connection refused, access denied), it will cause `get_zebby_user_info()` to return `None` - making it appear the user isn't logged in, even though they are. This results in an infinite redirect loop to login.
+
+By wrapping the sync in its own try/except, auth continues to work even if the database is temporarily unavailable.
 
 ## Step 8: WSGI Entry Point
 
 ### wsgi.py
 ```python
 #!/usr/bin/env python3
-from app import app
+import sys
+import os
 
-if __name__ == '__main__':
-    app.run()
+# Add application directory to Python path (required for mod_wsgi)
+sys.path.insert(0, os.path.dirname(__file__))
+
+from app import app as application
+```
+
+**Note:** The variable must be named `application` for mod_wsgi compatibility. The `sys.path.insert` line is required because mod_wsgi doesn't automatically add your app directory to the Python path.
+
+### Apache Configuration
+
+```apache
+WSGIDaemonProcess zebby_yourservice python-home=/var/www/zebby/yourservice/venv
+WSGIProcessGroup zebby_yourservice
+WSGIScriptAlias /yourservice /var/www/zebby/yourservice/wsgi.py
+
+<Directory /var/www/zebby/yourservice>
+    Require all granted
+</Directory>
 ```
 
 ## Zebby API Endpoints

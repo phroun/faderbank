@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Faderbank{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>window.BASE_URL = '{{ request.script_root }}';</script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <a href="{{ request.script_root }}/" class="logo">Faderbank</a>
+            {% block nav %}{% endblock %}
+        </div>
+        <div class="top-bar-right">
+            {% if user %}
+                <span class="user-name">{{ user.display_name or user.username }}</span>
+            {% endif %}
+            {% block top_bar_actions %}{% endblock %}
+        </div>
+    </header>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

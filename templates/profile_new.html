@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Create Profile - Faderbank{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <h1>Create New Profile</h1>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" class="form">
+        <div class="form-group">
+            <label for="name">Profile Name</label>
+            <input type="text" id="name" name="name" required
+                   placeholder="e.g., Main Studio"
+                   value="{{ request.form.get('name', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="slug">URL Slug</label>
+            <div class="input-with-status">
+                <input type="text" id="slug" name="slug" required
+                       pattern="[a-z0-9-]+"
+                       placeholder="e.g., main-studio"
+                       value="{{ request.form.get('slug', '') }}">
+                <span id="slug-status" class="input-status"></span>
+            </div>
+            <small>Lowercase letters, numbers, and hyphens only. This will be part of the URL.</small>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Create Profile</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const slugInput = document.getElementById('slug');
+const nameInput = document.getElementById('name');
+const slugStatus = document.getElementById('slug-status');
+
+let checkTimeout = null;
+
+// Auto-generate slug from name
+nameInput.addEventListener('input', function() {
+    if (!slugInput.dataset.userModified) {
+        const slug = this.value
+            .toLowerCase()
+            .trim()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/[-\s]+/g, '-');
+        slugInput.value = slug;
+        checkSlugAvailability(slug);
+    }
+});
+
+slugInput.addEventListener('input', function() {
+    this.dataset.userModified = 'true';
+    checkSlugAvailability(this.value);
+});
+
+function checkSlugAvailability(slug) {
+    clearTimeout(checkTimeout);
+
+    if (!slug) {
+        slugStatus.textContent = '';
+        slugStatus.className = 'input-status';
+        return;
+    }
+
+    slugStatus.textContent = 'Checking...';
+    slugStatus.className = 'input-status checking';
+
+    checkTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`${BASE_URL}/api/slug/check?slug=${encodeURIComponent(slug)}`);
+            const data = await response.json();
+
+            if (data.available) {
+                slugStatus.textContent = 'Available';
+                slugStatus.className = 'input-status available';
+            } else {
+                slugStatus.textContent = data.error || 'Not available';
+                slugStatus.className = 'input-status unavailable';
+            }
+        } catch (e) {
+            slugStatus.textContent = 'Error checking';
+            slugStatus.className = 'input-status error';
+        }
+    }, 300);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Accept Invitation - Faderbank{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <div class="invite-page">
+        <h1>You've Been Invited!</h1>
+        <p>You've been invited to join <strong>{{ link.profile_name }}</strong> as a <strong>{{ link.role }}</strong>.</p>
+        <p>Please log in to accept this invitation.</p>
+        <a href="/login?return_to={{ return_url | urlencode }}" class="btn btn-primary btn-large">Log In to Accept</a>
+    </div>
+</div>
+{% endblock %}
