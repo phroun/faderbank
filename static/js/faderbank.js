@@ -781,6 +781,15 @@
         if (e.touches.length === 1) {
             const touch = e.touches[0];
             const coords = getCanvasCoords({ clientX: touch.clientX, clientY: touch.clientY });
+
+            // Check for custom button hit first
+            const clickedButton = hitTestButton(coords.x, coords.y);
+            if (clickedButton) {
+                e.preventDefault();
+                pressButton(clickedButton);
+                return;
+            }
+
             const hit = hitTest(coords.x, coords.y);
 
             // Only prevent scrolling if touching an interactive element
