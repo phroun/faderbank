@@ -13,6 +13,7 @@ import argparse
 import subprocess
 import sys
 import time
+import threading
 
 try:
     import rtmidi
@@ -69,14 +70,18 @@ def get_macos_volume():
 
 
 class MidiVolumeController:
-    def __init__(self, midi_port, midi_channel, cc_number, invert=False):
+    def __init__(self, midi_port, midi_channel, cc_number, invert=False, debounce_ms=100):
         self.midi_port = midi_port
         self.midi_channel = midi_channel - 1  # Convert to 0-indexed
         self.cc_number = cc_number
         self.invert = invert
+        self.debounce_ms = debounce_ms
         self.running = False
         self.midi_in = None
         self.last_volume = None
+        self.pending_volume = None
+        self.last_update_time = 0
+        self.debounce_timer = None
 
     def start(self):
         """Start listening for MIDI messages."""
@@ -126,9 +131,26 @@ class MidiVolumeController:
     def stop(self):
         """Stop listening."""
         self.running = False
+        if self.debounce_timer:
+            self.debounce_timer.cancel()
+            self.debounce_timer = None
         if self.midi_in:
             self.midi_in.close_port()
             self.midi_in = None
+
+    def apply_volume(self, volume):
+        """Actually apply the volume change."""
+        if volume != self.last_volume:
+            self.last_volume = volume
+            set_macos_volume(volume)
+            print(f"Volume: {volume}%")
+
+    def apply_pending_volume(self):
+        """Apply pending volume (called by debounce timer)."""
+        if self.pending_volume is not None:
+            self.apply_volume(self.pending_volume)
+            self.pending_volume = None
+        self.debounce_timer = None
 
     def midi_callback(self, event, data=None):
         """Handle incoming MIDI messages."""
@@ -160,11 +182,25 @@ class MidiVolumeController:
 
         volume = int(value * 100 / 127)
 
-        # Only update if changed
-        if volume != self.last_volume:
-            self.last_volume = volume
-            set_macos_volume(volume)
-            print(f"Volume: {volume}% (CC value: {message[2]})")
+        # Debounce: only apply at most every debounce_ms
+        now = time.time() * 1000
+        time_since_last = now - self.last_update_time
+
+        if time_since_last >= self.debounce_ms:
+            # Enough time has passed, apply immediately
+            self.last_update_time = now
+            self.apply_volume(volume)
+            # Cancel any pending timer
+            if self.debounce_timer:
+                self.debounce_timer.cancel()
+                self.debounce_timer = None
+        else:
+            # Too soon, store as pending and schedule timer
+            self.pending_volume = volume
+            if not self.debounce_timer:
+                delay = (self.debounce_ms - time_since_last) / 1000.0
+                self.debounce_timer = threading.Timer(delay, self.apply_pending_volume)
+                self.debounce_timer.start()
 
 
 def main():
@@ -194,6 +230,8 @@ Examples:
                         help='CC number to listen for (default: 7, standard volume)')
     parser.add_argument('--invert', action='store_true',
                         help='Invert CC values (127=mute, 0=full)')
+    parser.add_argument('--debounce', type=int, default=100,
+                        help='Debounce interval in ms (default: 100, max 10 updates/sec)')
 
     args = parser.parse_args()
 
@@ -208,7 +246,8 @@ Examples:
         midi_port=args.midi_port,
         midi_channel=args.channel,
         cc_number=args.cc,
-        invert=args.invert
+        invert=args.invert,
+        debounce_ms=args.debounce
     )
 
     if not controller.start():
