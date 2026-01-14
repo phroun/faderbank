@@ -35,7 +35,8 @@ except ImportError:
 
 class AudioToMidi:
     def __init__(self, audio_device, midi_port, channel_mappings, midi_channel=1,
-                 sample_rate=44100, block_size=1024, peak_hold_ms=100, smoothing=0.3):
+                 sample_rate=44100, block_size=1024, peak_hold_ms=100,
+                 attack_ms=10, release_ms=300):
         self.audio_device = audio_device
         self.midi_port = midi_port
         self.channel_mappings = channel_mappings  # {audio_ch: cc_number}
@@ -43,7 +44,8 @@ class AudioToMidi:
         self.sample_rate = sample_rate
         self.block_size = block_size
         self.peak_hold_ms = peak_hold_ms
-        self.smoothing = smoothing
+        self.attack_ms = attack_ms
+        self.release_ms = release_ms
 
         self.running = False
         self.midi_out = None
@@ -147,21 +149,38 @@ class AudioToMidi:
             # Normalize to 0-1 (map -60dB..0dB to 0..1)
             level = max(0, min(1, (db + 60) / 60))
 
-            # Apply smoothing (fast attack, slow release)
-            if level > self.smoothed_levels[audio_ch]:
-                self.smoothed_levels[audio_ch] = level
+            # Time-based smoothing (proper VU ballistics)
+            # Calculate time since last update for this channel
+            last_time = getattr(self, '_last_update_times', {}).get(audio_ch, now)
+            if not hasattr(self, '_last_update_times'):
+                self._last_update_times = {}
+            delta_ms = now - last_time
+            self._last_update_times[audio_ch] = now
+
+            # Use configured attack and release times
+            attack_ms = self.attack_ms
+            release_ms = self.release_ms
+
+            current = self.smoothed_levels[audio_ch]
+
+            if level > current:
+                # Attack - fast rise
+                attack_coef = 1 - np.exp(-delta_ms / attack_ms)
+                self.smoothed_levels[audio_ch] = current + (level - current) * attack_coef
             else:
-                self.smoothed_levels[audio_ch] = (
-                    self.smoothed_levels[audio_ch] * self.smoothing +
-                    level * (1 - self.smoothing)
-                )
+                # Release - slow fall
+                release_coef = np.exp(-delta_ms / release_ms)
+                self.smoothed_levels[audio_ch] = level + (current - level) * release_coef
 
             # Peak hold
             if self.smoothed_levels[audio_ch] >= self.peak_levels[audio_ch]:
                 self.peak_levels[audio_ch] = self.smoothed_levels[audio_ch]
                 self.peak_times[audio_ch] = now
             elif now - self.peak_times[audio_ch] > self.peak_hold_ms:
-                self.peak_levels[audio_ch] = self.smoothed_levels[audio_ch]
+                # Gradually fall from peak instead of snapping
+                fall_coef = np.exp(-(now - self.peak_times[audio_ch] - self.peak_hold_ms) / release_ms)
+                self.peak_levels[audio_ch] = self.smoothed_levels[audio_ch] + \
+                    (self.peak_levels[audio_ch] - self.smoothed_levels[audio_ch]) * fall_coef
 
             # Convert to MIDI CC value
             cc_value = int(self.peak_levels[audio_ch] * 127)
@@ -253,8 +272,10 @@ Examples:
                         help='Audio block size (default: 1024)')
     parser.add_argument('--peak-hold', type=int, default=100,
                         help='Peak hold time in ms (default: 100)')
-    parser.add_argument('--smoothing', type=float, default=0.3,
-                        help='Smoothing factor 0-1 (default: 0.3)')
+    parser.add_argument('--attack', type=int, default=10,
+                        help='Attack time in ms (default: 10)')
+    parser.add_argument('--release', type=int, default=300,
+                        help='Release time in ms (default: 300)')
 
     args = parser.parse_args()
 
@@ -292,7 +313,8 @@ Examples:
         sample_rate=args.sample_rate,
         block_size=args.block_size,
         peak_hold_ms=args.peak_hold,
-        smoothing=args.smoothing
+        attack_ms=args.attack,
+        release_ms=args.release
     )
 
     # Handle Ctrl+C gracefully

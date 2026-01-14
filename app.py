@@ -227,8 +227,16 @@ def new_profile(user):
 def view_profile(user, profile, role, slug):
     """Main profile view with canvas fader bank."""
     channels = get_channel_strips(profile['id'])
-    responsibility = get_responsibility(profile['id'])
+    resp = get_responsibility(profile['id'])
     members = get_profile_members(profile['id'])
+
+    # Convert responsibility to JSON-safe format
+    responsibility = None
+    if resp and resp.get('user_id'):
+        responsibility = {
+            'user_id': resp['user_id'],
+            'display_name': resp.get('display_name') or resp.get('username')
+        }
 
     return render_template('profile_view.html',
                            user=user,

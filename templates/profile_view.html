@@ -102,7 +102,8 @@ window.FADERBANK = {
     role: '{{ role }}',
     channels: {{ channels | tojson }},
     canOperate: {{ 'true' if role in ['owner', 'admin', 'technician', 'operator'] else 'false' }},
-    initialOnlineUsers: { {{ user.user_id }}: { display_name: '{{ user.display_name or user.username }}' } }
+    initialOnlineUsers: { {{ user.user_id }}: { display_name: '{{ user.display_name or user.username }}' } },
+    initialResponsibility: {{ responsibility | tojson if responsibility else 'null' }}
 };
 </script>
 <script src="{{ url_for('static', filename='js/faderbank.js') }}"></script>

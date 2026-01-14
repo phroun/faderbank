@@ -34,7 +34,7 @@
     // State
     let channels = [...config.channels];
     let onlineUsers = config.initialOnlineUsers || {};
-    let responsibilityUser = null;
+    let responsibilityUser = config.initialResponsibility || null;
     let socket = null;
     let canvas = null;
     let ctx = null;
