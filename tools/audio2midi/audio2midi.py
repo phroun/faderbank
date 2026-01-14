@@ -36,7 +36,7 @@ except ImportError:
 class AudioToMidi:
     def __init__(self, audio_device, midi_port, channel_mappings, midi_channel=1,
                  sample_rate=44100, block_size=1024, peak_hold_ms=100,
-                 attack_ms=10, release_ms=300):
+                 attack_ms=10, release_ms=300, avg_window=8):
         self.audio_device = audio_device
         self.midi_port = midi_port
         self.channel_mappings = channel_mappings  # {audio_ch: cc_number}
@@ -46,6 +46,7 @@ class AudioToMidi:
         self.peak_hold_ms = peak_hold_ms
         self.attack_ms = attack_ms
         self.release_ms = release_ms
+        self.avg_window = avg_window  # Number of RMS readings to average
 
         self.running = False
         self.midi_out = None
@@ -56,12 +57,14 @@ class AudioToMidi:
         self.peak_levels = {}
         self.peak_times = {}
         self.last_cc_values = {}
+        self.rms_buffers = {}  # Running average buffers
 
         for ch in channel_mappings.keys():
             self.smoothed_levels[ch] = 0.0
             self.peak_levels[ch] = 0.0
             self.peak_times[ch] = 0
             self.last_cc_values[ch] = -1
+            self.rms_buffers[ch] = []  # Circular buffer for RMS averaging
 
     def start(self):
         # Initialize MIDI output
@@ -139,10 +142,18 @@ class AudioToMidi:
             channel_data = indata[:, audio_ch]
             rms = np.sqrt(np.mean(channel_data ** 2))
 
+            # Add to running average buffer
+            self.rms_buffers[audio_ch].append(rms)
+            if len(self.rms_buffers[audio_ch]) > self.avg_window:
+                self.rms_buffers[audio_ch].pop(0)
+
+            # Use averaged RMS for smoother output
+            avg_rms = np.mean(self.rms_buffers[audio_ch])
+
             # Convert to dB and then to 0-1 range
             # Assuming -60dB to 0dB range
-            if rms > 0:
-                db = 20 * np.log10(rms)
+            if avg_rms > 0:
+                db = 20 * np.log10(avg_rms)
             else:
                 db = -60
 
@@ -276,6 +287,8 @@ Examples:
                         help='Attack time in ms (default: 10)')
     parser.add_argument('--release', type=int, default=300,
                         help='Release time in ms (default: 300)')
+    parser.add_argument('--avg-window', type=int, default=8,
+                        help='RMS averaging window size (default: 8 blocks)')
 
     args = parser.parse_args()
 
@@ -314,7 +327,8 @@ Examples:
         block_size=args.block_size,
         peak_hold_ms=args.peak_hold,
         attack_ms=args.attack,
-        release_ms=args.release
+        release_ms=args.release,
+        avg_window=args.avg_window
     )
 
     # Handle Ctrl+C gracefully

@@ -415,9 +415,17 @@
         ctx.fillStyle = '#0a0a15';
         ctx.fillRect(x, y, width, height);
 
-        if (!isMuted && channel.vu_level !== undefined && channel.vu_level > 0) {
+        if (channel.vu_level !== undefined && channel.vu_level > 0) {
             const level = channel.vu_level / 127;
             const meterHeight = height * level;
+
+            // Save context for alpha manipulation
+            ctx.save();
+
+            // Dim the VU meter if muted (30% opacity vs full)
+            if (isMuted) {
+                ctx.globalAlpha = 0.3;
+            }
 
             // Gradient from green to yellow to red
             const gradient = ctx.createLinearGradient(x, y + height, x, y);
@@ -428,6 +436,9 @@
 
             ctx.fillStyle = gradient;
             ctx.fillRect(x, y + height - meterHeight, width, meterHeight);
+
+            // Restore context
+            ctx.restore();
         }
 
         // Border
