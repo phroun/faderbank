@@ -2,8 +2,9 @@
 """
 MIDI to macOS System Volume Controller
 
-Listens to MIDI CC messages and controls macOS system volume.
-Can target a specific audio output device.
+Listens to MIDI CC messages and controls macOS audio device volume.
+Can target a specific audio output device directly via CoreAudio,
+even when it's part of a multi-output aggregate device.
 
 Usage:
     python midi2volume.py -m "IAC Driver Bus 1" -c 1 --cc 7
@@ -13,6 +14,7 @@ Usage:
 """
 
 import argparse
+import ctypes
 import subprocess
 import sys
 import time
@@ -23,6 +25,255 @@ try:
 except ImportError:
     print("Error: pygame not installed. Run: pip install pygame")
     sys.exit(1)
+
+# CoreAudio constants
+kAudioHardwarePropertyDevices = 1684370979  # 'dev#'
+kAudioObjectPropertyScopeGlobal = 1735159650  # 'glob'
+kAudioObjectPropertyElementMain = 0
+kAudioDevicePropertyScopeOutput = 1869968496  # 'outp'
+kAudioObjectPropertyName = 1819173229  # 'lnam'
+kAudioDevicePropertyVolumeScalar = 1987013741  # 'volm'
+kAudioDevicePropertyMute = 1836414053  # 'mute'
+kAudioHardwarePropertyDefaultOutputDevice = 1682929012  # 'dOut'
+kAudioObjectSystemObject = 1
+
+# Try to load CoreAudio framework
+try:
+    _coreaudio = ctypes.CDLL('/System/Library/Frameworks/CoreAudio.framework/CoreAudio')
+    COREAUDIO_AVAILABLE = True
+except OSError:
+    COREAUDIO_AVAILABLE = False
+
+
+class AudioObjectPropertyAddress(ctypes.Structure):
+    _fields_ = [
+        ('mSelector', ctypes.c_uint32),
+        ('mScope', ctypes.c_uint32),
+        ('mElement', ctypes.c_uint32),
+    ]
+
+
+def get_audio_devices():
+    """Get list of audio output devices using CoreAudio."""
+    if not COREAUDIO_AVAILABLE:
+        return []
+
+    # Get the size of the devices array
+    prop_address = AudioObjectPropertyAddress(
+        kAudioHardwarePropertyDevices,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    )
+
+    data_size = ctypes.c_uint32(0)
+    status = _coreaudio.AudioObjectGetPropertyDataSize(
+        kAudioObjectSystemObject,
+        ctypes.byref(prop_address),
+        0,
+        None,
+        ctypes.byref(data_size)
+    )
+
+    if status != 0:
+        return []
+
+    # Get device IDs
+    num_devices = data_size.value // ctypes.sizeof(ctypes.c_uint32)
+    device_ids = (ctypes.c_uint32 * num_devices)()
+
+    status = _coreaudio.AudioObjectGetPropertyData(
+        kAudioObjectSystemObject,
+        ctypes.byref(prop_address),
+        0,
+        None,
+        ctypes.byref(data_size),
+        device_ids
+    )
+
+    if status != 0:
+        return []
+
+    devices = []
+    for device_id in device_ids:
+        name = get_device_name(device_id)
+        if name and has_output_volume(device_id):
+            devices.append({
+                'id': device_id,
+                'name': name,
+                'has_volume': True
+            })
+
+    return devices
+
+
+def get_device_name(device_id):
+    """Get the name of an audio device."""
+    if not COREAUDIO_AVAILABLE:
+        return None
+
+    prop_address = AudioObjectPropertyAddress(
+        kAudioObjectPropertyName,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    )
+
+    # CFStringRef
+    cf_string = ctypes.c_void_p()
+    data_size = ctypes.c_uint32(ctypes.sizeof(ctypes.c_void_p))
+
+    status = _coreaudio.AudioObjectGetPropertyData(
+        device_id,
+        ctypes.byref(prop_address),
+        0,
+        None,
+        ctypes.byref(data_size),
+        ctypes.byref(cf_string)
+    )
+
+    if status != 0 or not cf_string:
+        return None
+
+    # Convert CFString to Python string
+    try:
+        cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+        cf.CFStringGetCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
+        cf.CFStringGetCString.restype = ctypes.c_bool
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+
+        buffer = ctypes.create_string_buffer(256)
+        if cf.CFStringGetCString(cf_string, buffer, 256, 0x08000100):  # kCFStringEncodingUTF8
+            name = buffer.value.decode('utf-8')
+        else:
+            name = None
+
+        cf.CFRelease(cf_string)
+        return name
+    except Exception:
+        return None
+
+
+def has_output_volume(device_id):
+    """Check if device has output volume control."""
+    if not COREAUDIO_AVAILABLE:
+        return False
+
+    prop_address = AudioObjectPropertyAddress(
+        kAudioDevicePropertyVolumeScalar,
+        kAudioDevicePropertyScopeOutput,
+        0  # Master channel
+    )
+
+    has_property = _coreaudio.AudioObjectHasProperty(device_id, ctypes.byref(prop_address))
+    return bool(has_property)
+
+
+def get_device_id_by_name(name):
+    """Find a device ID by name (partial match)."""
+    devices = get_audio_devices()
+    for device in devices:
+        if name.lower() in device['name'].lower():
+            return device['id']
+    return None
+
+
+def get_device_volume(device_id):
+    """Get volume of a specific device (0.0 to 1.0)."""
+    if not COREAUDIO_AVAILABLE:
+        return None
+
+    prop_address = AudioObjectPropertyAddress(
+        kAudioDevicePropertyVolumeScalar,
+        kAudioDevicePropertyScopeOutput,
+        0  # Master channel
+    )
+
+    volume = ctypes.c_float(0.0)
+    data_size = ctypes.c_uint32(ctypes.sizeof(ctypes.c_float))
+
+    status = _coreaudio.AudioObjectGetPropertyData(
+        device_id,
+        ctypes.byref(prop_address),
+        0,
+        None,
+        ctypes.byref(data_size),
+        ctypes.byref(volume)
+    )
+
+    if status != 0:
+        # Try channel 1 if master (0) doesn't work
+        prop_address.mElement = 1
+        status = _coreaudio.AudioObjectGetPropertyData(
+            device_id,
+            ctypes.byref(prop_address),
+            0,
+            None,
+            ctypes.byref(data_size),
+            ctypes.byref(volume)
+        )
+
+    if status != 0:
+        return None
+
+    return volume.value
+
+
+def set_device_volume(device_id, volume):
+    """Set volume of a specific device (0.0 to 1.0)."""
+    if not COREAUDIO_AVAILABLE:
+        return False
+
+    volume = max(0.0, min(1.0, volume))
+
+    prop_address = AudioObjectPropertyAddress(
+        kAudioDevicePropertyVolumeScalar,
+        kAudioDevicePropertyScopeOutput,
+        0  # Master channel
+    )
+
+    volume_value = ctypes.c_float(volume)
+    data_size = ctypes.c_uint32(ctypes.sizeof(ctypes.c_float))
+
+    # Check if property is settable
+    is_settable = ctypes.c_uint32(0)
+    _coreaudio.AudioObjectIsPropertySettable(
+        device_id,
+        ctypes.byref(prop_address),
+        ctypes.byref(is_settable)
+    )
+
+    if not is_settable.value:
+        # Try channel 1 if master isn't settable
+        prop_address.mElement = 1
+        _coreaudio.AudioObjectIsPropertySettable(
+            device_id,
+            ctypes.byref(prop_address),
+            ctypes.byref(is_settable)
+        )
+
+    status = _coreaudio.AudioObjectSetPropertyData(
+        device_id,
+        ctypes.byref(prop_address),
+        0,
+        None,
+        data_size,
+        ctypes.byref(volume_value)
+    )
+
+    if status != 0 and prop_address.mElement == 0:
+        # If master channel failed, try setting both L/R channels
+        for channel in [1, 2]:
+            prop_address.mElement = channel
+            _coreaudio.AudioObjectSetPropertyData(
+                device_id,
+                ctypes.byref(prop_address),
+                0,
+                None,
+                data_size,
+                ctypes.byref(volume_value)
+            )
+        return True
+
+    return status == 0
 
 
 def list_midi_ports():
@@ -48,64 +299,44 @@ def list_midi_ports():
 
 
 def list_audio_devices():
-    """List available audio output devices using SwitchAudioSource."""
-    try:
-        result = subprocess.run(
-            ['SwitchAudioSource', '-a', '-t', 'output'],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print("Available audio output devices:")
-        for line in result.stdout.strip().split('\n'):
-            if line:
-                print(f"  {line}")
+    """List available audio output devices with volume control."""
+    if not COREAUDIO_AVAILABLE:
+        print("Error: CoreAudio not available.")
+        print("Falling back to SwitchAudioSource...")
+        try:
+            result = subprocess.run(
+                ['SwitchAudioSource', '-a', '-t', 'output'],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            print("Available audio output devices:")
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    print(f"  {line}")
+        except FileNotFoundError:
+            print("Error: SwitchAudioSource not found.")
+            print("Install it with: brew install switchaudio-osx")
+        return
 
-        # Show current device
-        current = subprocess.run(
-            ['SwitchAudioSource', '-c'],
-            capture_output=True,
-            text=True
-        )
-        if current.returncode == 0:
-            print(f"\nCurrent output device: {current.stdout.strip()}")
+    devices = get_audio_devices()
 
-    except FileNotFoundError:
-        print("Error: SwitchAudioSource not found.")
-        print("Install it with: brew install switchaudio-osx")
-        print("\nAlternatively, you can list devices with:")
-        print("  system_profiler SPAudioDataType")
-        sys.exit(1)
+    print("Available audio output devices (with volume control):")
+    print("-" * 60)
 
+    if not devices:
+        print("  (none found)")
+        return
 
-def get_current_audio_device():
-    """Get the current audio output device name."""
-    try:
-        result = subprocess.run(
-            ['SwitchAudioSource', '-c'],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except FileNotFoundError:
-        pass
-    return None
-
-
-def set_audio_device(device_name):
-    """Set the audio output device."""
-    try:
-        result = subprocess.run(
-            ['SwitchAudioSource', '-s', device_name],
-            capture_output=True,
-            text=True
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        print("Error: SwitchAudioSource not found.")
-        print("Install it with: brew install switchaudio-osx")
-        return False
+    for device in devices:
+        volume = get_device_volume(device['id'])
+        if volume is not None:
+            vol_percent = int(volume * 100)
+            print(f"  {device['name']}")
+            print(f"       ID: {device['id']}, Volume: {vol_percent}%")
+        else:
+            print(f"  {device['name']}")
+            print(f"       ID: {device['id']}, Volume: (not readable)")
 
 
 def set_macos_volume(level):
@@ -149,7 +380,7 @@ class MidiVolumeController:
         self.invert = invert
         self.debounce_ms = debounce_ms
         self.audio_device = audio_device
-        self.original_device = None  # To restore when done
+        self.audio_device_id = None  # CoreAudio device ID
         self.running = False
         self.midi_in = None
         self.last_volume = None
@@ -204,12 +435,15 @@ class MidiVolumeController:
 
         # Handle audio device selection
         if self.audio_device:
-            self.original_device = get_current_audio_device()
-            if self.original_device:
-                if not set_audio_device(self.audio_device):
-                    print(f"Error: Could not switch to audio device '{self.audio_device}'")
+            if COREAUDIO_AVAILABLE:
+                self.audio_device_id = get_device_id_by_name(self.audio_device)
+                if self.audio_device_id is None:
+                    print(f"Error: Audio device '{self.audio_device}' not found.")
+                    print("Use --list-audio to see available devices.")
                     pygame.midi.quit()
                     return False
+            else:
+                print("Warning: CoreAudio not available, --audio-device will use system volume")
 
         print(f"MIDI Volume Controller")
         print(f"======================")
@@ -218,13 +452,21 @@ class MidiVolumeController:
         print(f"CC Number: {self.cc_number}")
         print(f"Invert: {self.invert}")
         if self.audio_device:
-            print(f"Audio Device: {self.audio_device}")
+            if self.audio_device_id:
+                print(f"Audio Device: {self.audio_device} (CoreAudio ID: {self.audio_device_id})")
+            else:
+                print(f"Audio Device: {self.audio_device} (using system volume)")
         print()
 
         # Show current volume
-        current = get_macos_volume()
-        if current is not None:
-            print(f"Current volume: {current}%")
+        if self.audio_device_id:
+            volume = get_device_volume(self.audio_device_id)
+            if volume is not None:
+                print(f"Current device volume: {int(volume * 100)}%")
+        else:
+            current = get_macos_volume()
+            if current is not None:
+                print(f"Current system volume: {current}%")
 
         print()
         print("Listening for MIDI... Press Ctrl+C to stop")
@@ -240,17 +482,20 @@ class MidiVolumeController:
         if self.midi_in:
             self.midi_in.close()
             self.midi_in = None
-        # Restore original audio device if we changed it
-        if self.original_device and self.audio_device:
-            set_audio_device(self.original_device)
-            print(f"Restored audio device: {self.original_device}")
         pygame.midi.quit()
 
     def apply_volume(self, volume):
         """Actually apply the volume change."""
         if volume != self.last_volume:
             self.last_volume = volume
-            set_macos_volume(volume)
+
+            if self.audio_device_id:
+                # Use CoreAudio to set device volume directly
+                set_device_volume(self.audio_device_id, volume / 100.0)
+            else:
+                # Use system volume
+                set_macos_volume(volume)
+
             print(f"Volume: {volume}%")
 
     def apply_pending_volume(self):
@@ -320,7 +565,7 @@ class MidiVolumeController:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Control macOS system volume via MIDI CC',
+        description='Control macOS audio device volume via MIDI CC',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -333,13 +578,14 @@ Examples:
   Listen on IAC Driver, channel 1, CC 7 (standard volume):
     python midi2volume.py -m "IAC Driver" -c 1 --cc 7
 
-  Control a specific audio device:
+  Control a specific audio device (works with multi-output devices):
     python midi2volume.py -m "IAC Driver" -c 1 --cc 7 --audio-device "External Headphones"
 
   Listen with inverted values (127 = mute, 0 = full):
     python midi2volume.py -m "IAC Driver" -c 1 --cc 7 --invert
 
-Note: --audio-device requires SwitchAudioSource (brew install switchaudio-osx)
+Note: --audio-device uses CoreAudio to control volume directly on the
+specified device, even when it's part of a multi-output aggregate device.
 """
     )
 
@@ -354,7 +600,7 @@ Note: --audio-device requires SwitchAudioSource (brew install switchaudio-osx)
     parser.add_argument('--cc', type=int, default=7,
                         help='CC number to listen for (default: 7, standard volume)')
     parser.add_argument('--audio-device', type=str,
-                        help='Target audio output device (requires SwitchAudioSource)')
+                        help='Target audio output device (uses CoreAudio directly)')
     parser.add_argument('--invert', action='store_true',
                         help='Invert CC values (127=mute, 0=full)')
     parser.add_argument('--debounce', type=int, default=100,
