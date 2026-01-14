@@ -19,9 +19,15 @@ import sys
 import time
 
 try:
+    import pygame
     import pygame.midi
-except ImportError:
-    print("Error: pygame not installed. Run: pip install pygame")
+except ImportError as e:
+    print(f"Error importing pygame.midi: {e}")
+    print("Try: pip install pygame")
+    sys.exit(1)
+except Exception as e:
+    print(f"Error loading pygame.midi: {e}")
+    print("pygame may not support MIDI on this platform/Python version.")
     sys.exit(1)
 
 try:
