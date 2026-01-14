@@ -2,11 +2,14 @@
 """
 MIDI to macOS System Volume Controller
 
-Listens to MIDI CC messages and controls macOS system master volume.
+Listens to MIDI CC messages and controls macOS system volume.
+Can target a specific audio output device.
 
 Usage:
     python midi2volume.py -m "IAC Driver Bus 1" -c 1 --cc 7
     python midi2volume.py --list-midi
+    python midi2volume.py --list-audio
+    python midi2volume.py -m "IAC" -c 1 --cc 7 --audio-device "External Headphones"
 """
 
 import argparse
@@ -44,6 +47,67 @@ def list_midi_ports():
     pygame.midi.quit()
 
 
+def list_audio_devices():
+    """List available audio output devices using SwitchAudioSource."""
+    try:
+        result = subprocess.run(
+            ['SwitchAudioSource', '-a', '-t', 'output'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("Available audio output devices:")
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                print(f"  {line}")
+
+        # Show current device
+        current = subprocess.run(
+            ['SwitchAudioSource', '-c'],
+            capture_output=True,
+            text=True
+        )
+        if current.returncode == 0:
+            print(f"\nCurrent output device: {current.stdout.strip()}")
+
+    except FileNotFoundError:
+        print("Error: SwitchAudioSource not found.")
+        print("Install it with: brew install switchaudio-osx")
+        print("\nAlternatively, you can list devices with:")
+        print("  system_profiler SPAudioDataType")
+        sys.exit(1)
+
+
+def get_current_audio_device():
+    """Get the current audio output device name."""
+    try:
+        result = subprocess.run(
+            ['SwitchAudioSource', '-c'],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except FileNotFoundError:
+        pass
+    return None
+
+
+def set_audio_device(device_name):
+    """Set the audio output device."""
+    try:
+        result = subprocess.run(
+            ['SwitchAudioSource', '-s', device_name],
+            capture_output=True,
+            text=True
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        print("Error: SwitchAudioSource not found.")
+        print("Install it with: brew install switchaudio-osx")
+        return False
+
+
 def set_macos_volume(level):
     """Set macOS system volume (0-100)."""
     try:
@@ -78,12 +142,14 @@ def get_macos_volume():
 
 
 class MidiVolumeController:
-    def __init__(self, midi_port, midi_channel, cc_number, invert=False, debounce_ms=100):
+    def __init__(self, midi_port, midi_channel, cc_number, invert=False, debounce_ms=100, audio_device=None):
         self.midi_port = midi_port
         self.midi_channel = midi_channel - 1  # Convert to 0-indexed
         self.cc_number = cc_number
         self.invert = invert
         self.debounce_ms = debounce_ms
+        self.audio_device = audio_device
+        self.original_device = None  # To restore when done
         self.running = False
         self.midi_in = None
         self.last_volume = None
@@ -136,18 +202,29 @@ class MidiVolumeController:
 
         self.running = True
 
+        # Handle audio device selection
+        if self.audio_device:
+            self.original_device = get_current_audio_device()
+            if self.original_device:
+                if not set_audio_device(self.audio_device):
+                    print(f"Error: Could not switch to audio device '{self.audio_device}'")
+                    pygame.midi.quit()
+                    return False
+
         print(f"MIDI Volume Controller")
         print(f"======================")
         print(f"MIDI Port: {port_name}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
         print(f"CC Number: {self.cc_number}")
         print(f"Invert: {self.invert}")
+        if self.audio_device:
+            print(f"Audio Device: {self.audio_device}")
         print()
 
         # Show current volume
         current = get_macos_volume()
         if current is not None:
-            print(f"Current system volume: {current}%")
+            print(f"Current volume: {current}%")
 
         print()
         print("Listening for MIDI... Press Ctrl+C to stop")
@@ -163,6 +240,10 @@ class MidiVolumeController:
         if self.midi_in:
             self.midi_in.close()
             self.midi_in = None
+        # Restore original audio device if we changed it
+        if self.original_device and self.audio_device:
+            set_audio_device(self.original_device)
+            print(f"Restored audio device: {self.original_device}")
         pygame.midi.quit()
 
     def apply_volume(self, volume):
@@ -246,22 +327,34 @@ Examples:
   List MIDI ports:
     python midi2volume.py --list-midi
 
+  List audio output devices:
+    python midi2volume.py --list-audio
+
   Listen on IAC Driver, channel 1, CC 7 (standard volume):
     python midi2volume.py -m "IAC Driver" -c 1 --cc 7
 
+  Control a specific audio device:
+    python midi2volume.py -m "IAC Driver" -c 1 --cc 7 --audio-device "External Headphones"
+
   Listen with inverted values (127 = mute, 0 = full):
     python midi2volume.py -m "IAC Driver" -c 1 --cc 7 --invert
+
+Note: --audio-device requires SwitchAudioSource (brew install switchaudio-osx)
 """
     )
 
     parser.add_argument('--list-midi', action='store_true',
                         help='List available MIDI input ports')
+    parser.add_argument('--list-audio', action='store_true',
+                        help='List available audio output devices')
     parser.add_argument('-m', '--midi-port', type=str,
                         help='MIDI input port (name or index)')
     parser.add_argument('-c', '--channel', type=int, default=1,
                         help='MIDI channel (1-16, default: 1)')
     parser.add_argument('--cc', type=int, default=7,
                         help='CC number to listen for (default: 7, standard volume)')
+    parser.add_argument('--audio-device', type=str,
+                        help='Target audio output device (requires SwitchAudioSource)')
     parser.add_argument('--invert', action='store_true',
                         help='Invert CC values (127=mute, 0=full)')
     parser.add_argument('--debounce', type=int, default=100,
@@ -273,6 +366,10 @@ Examples:
         list_midi_ports()
         return
 
+    if args.list_audio:
+        list_audio_devices()
+        return
+
     if not args.midi_port:
         parser.error("--midi-port is required (or use --list-midi to see available ports)")
 
@@ -281,7 +378,8 @@ Examples:
         midi_channel=args.channel,
         cc_number=args.cc,
         invert=args.invert,
-        debounce_ms=args.debounce
+        debounce_ms=args.debounce,
+        audio_device=args.audio_device
     )
 
     if not controller.start():
