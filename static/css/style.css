@@ -769,3 +769,18 @@ hr {
         margin-top: 0.5rem;
     }
 }
+
+/* MIDI Debug Display */
+.midi-debug {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.5rem 1rem;
+    background-color: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    z-index: 100;
+}

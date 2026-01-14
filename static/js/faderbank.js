@@ -946,6 +946,11 @@
     function handleMidiInput(message) {
         const [status, cc, value] = message.data;
 
+        // Update debug display with raw MIDI data
+        const msgType = (status & 0xF0) === 0xB0 ? 'CC' : 'Other';
+        const msgChan = (status & 0x0F) + 1;
+        updateMidiDebug(`${msgType} Ch:${msgChan} CC:${cc} Val:${value}`);
+
         // Check if it's a CC message on our channel
         const expectedStatus = 0xB0 + (midiChannel - 1);
         if (status !== expectedStatus) return;
@@ -1096,15 +1101,24 @@
             li.appendChild(indicator);
 
             const name = document.createElement('span');
-            name.textContent = user.display_name;
-            if (responsibilityUser && responsibilityUser.user_id === parseInt(userId)) {
+            const hasResponsibility = responsibilityUser && responsibilityUser.user_id === parseInt(userId);
+            if (hasResponsibility) {
                 name.className = 'user-has-responsibility';
-                name.textContent += ' *';
+                name.textContent = '🎛️ ' + user.display_name;
+            } else {
+                name.textContent = user.display_name;
             }
             li.appendChild(name);
 
             list.appendChild(li);
         });
+    }
+
+    function updateMidiDebug(message) {
+        const debugEl = document.getElementById('midi-debug');
+        if (debugEl) {
+            debugEl.textContent = 'MIDI: ' + message;
+        }
     }
 
     // ==========================================================================
