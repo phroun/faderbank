@@ -8,7 +8,7 @@ echo "=== Faderbank CentOS Setup ==="
 
 # Install system dependencies
 echo "Installing system packages..."
-dnf install -y python3 python3-pip python3-devel gcc nginx
+dnf install -y python3 python3-pip python3-devel gcc
 
 # Create service user
 echo "Creating faderbank user..."
@@ -67,7 +67,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Copy your app files to /opt/faderbank/"
 echo "  2. Create config/zebby.py with your APP_SECRET_KEY"
-echo "  3. Configure nginx (see deploy/nginx-faderbank.conf)"
+echo "  3. Configure Apache (see deploy/apache-faderbank.conf)"
 echo "  4. Start the service: systemctl start faderbank"
 echo "  5. Check status: systemctl status faderbank"
 echo "  6. View logs: journalctl -u faderbank -f"
