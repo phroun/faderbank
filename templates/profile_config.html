@@ -80,15 +80,23 @@
             </div>
             <div class="button-config-details">
                 <div class="config-field">
-                    <label>MIDI CC</label>
+                    <label>MIDI Type</label>
+                    <select class="button-midi-type">
+                        <option value="cc" {% if button.midi_type == 'cc' %}selected{% endif %}>CC</option>
+                        <option value="note" {% if button.midi_type == 'note' %}selected{% endif %}>Note</option>
+                        <option value="pc" {% if button.midi_type == 'pc' %}selected{% endif %}>PC</option>
+                    </select>
+                </div>
+                <div class="config-field">
+                    <label class="button-cc-label">{% if button.midi_type == 'note' %}Note{% elif button.midi_type == 'pc' %}Program{% else %}CC{% endif %} #</label>
                     <input type="number" class="button-cc" value="{{ button.midi_cc }}" min="0" max="127">
                 </div>
                 <div class="config-field">
-                    <label>On Value</label>
+                    <label class="button-on-label">{% if button.midi_type == 'note' %}Velocity{% elif button.midi_type == 'pc' %}Program{% else %}On Value{% endif %}</label>
                     <input type="number" class="button-on-value" value="{{ button.on_value }}" min="0" max="127">
                 </div>
                 <div class="config-field">
-                    <label>Off Value</label>
+                    <label class="button-off-label">{% if button.midi_type == 'note' %}Off Vel{% elif button.midi_type == 'pc' %}Off Prog{% else %}Off Value{% endif %}</label>
                     <input type="number" class="button-off-value" value="{{ button.off_value }}" min="0" max="127">
                 </div>
                 <div class="config-field">
@@ -439,6 +447,7 @@ document.querySelectorAll('.btn-save-button').forEach(btn => {
         const channelVal = item.querySelector('.button-channel').value;
         const data = {
             label: item.querySelector('.button-label').value,
+            midi_type: item.querySelector('.button-midi-type').value,
             midi_cc: parseInt(item.querySelector('.button-cc').value) || 0,
             on_value: parseInt(item.querySelector('.button-on-value').value) || 127,
             off_value: parseInt(item.querySelector('.button-off-value').value) || 0,
@@ -485,6 +494,35 @@ document.querySelectorAll('.btn-delete-button').forEach(btn => {
         } catch (e) {
             alert('Error deleting button');
         }
+    });
+});
+
+// Update labels when MIDI type changes
+function updateButtonLabels(item) {
+    const midiType = item.querySelector('.button-midi-type').value;
+    const ccLabel = item.querySelector('.button-cc-label');
+    const onLabel = item.querySelector('.button-on-label');
+    const offLabel = item.querySelector('.button-off-label');
+
+    if (midiType === 'note') {
+        ccLabel.textContent = 'Note #';
+        onLabel.textContent = 'Velocity';
+        offLabel.textContent = 'Off Vel';
+    } else if (midiType === 'pc') {
+        ccLabel.textContent = 'Program #';
+        onLabel.textContent = 'Program';
+        offLabel.textContent = 'Off Prog';
+    } else {
+        ccLabel.textContent = 'CC #';
+        onLabel.textContent = 'On Value';
+        offLabel.textContent = 'Off Value';
+    }
+}
+
+document.querySelectorAll('.button-midi-type').forEach(select => {
+    select.addEventListener('change', function() {
+        const item = this.closest('.button-config-item');
+        updateButtonLabels(item);
     });
 });
 </script>

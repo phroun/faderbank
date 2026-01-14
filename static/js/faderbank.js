@@ -1199,25 +1199,42 @@
     function sendButtonMidi(data) {
         if (!midiOutput || !midiEnabled) return;
 
-        const status = 0xB0 + (midiChannel - 1);
-        console.log('sendButtonMidi:', data.mode, 'CC:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
+        const midiType = data.midi_type || 'cc';
+        const chan = midiChannel - 1;
+        console.log('sendButtonMidi:', data.mode, 'type:', midiType, 'num:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
 
         if (data.mode === 'momentary') {
-            // Momentary: send on_value, then off_value after short delay
-            console.log('Sending momentary MIDI:', [status, data.midi_cc, data.on_value]);
-            midiOutput.send([status, data.midi_cc, data.on_value]);
+            // Momentary: send on message, then off message after short delay
+            sendButtonMessage(midiType, chan, data.midi_cc, data.on_value, true);
             setTimeout(() => {
                 if (midiOutput && midiEnabled) {
-                    console.log('Sending momentary off MIDI:', [status, data.midi_cc, data.off_value]);
-                    midiOutput.send([status, data.midi_cc, data.off_value]);
+                    sendButtonMessage(midiType, chan, data.midi_cc, data.off_value, false);
                 }
             }, 50);
         } else {
             // Toggle: send based on new_state
             const value = data.new_state ? data.on_value : data.off_value;
-            console.log('Sending toggle MIDI:', [status, data.midi_cc, value]);
-            midiOutput.send([status, data.midi_cc, value]);
+            sendButtonMessage(midiType, chan, data.midi_cc, value, data.new_state);
         }
+    }
+
+    function sendButtonMessage(midiType, channel, number, value, isOn) {
+        let msg;
+        if (midiType === 'note') {
+            // Note On: 0x90, Note Off: 0x80
+            const status = (isOn && value > 0) ? (0x90 + channel) : (0x80 + channel);
+            msg = [status, number, value];
+        } else if (midiType === 'pc') {
+            // Program Change: 0xC0 (only 2 bytes, no velocity)
+            const status = 0xC0 + channel;
+            msg = [status, value];
+        } else {
+            // CC: 0xB0
+            const status = 0xB0 + channel;
+            msg = [status, number, value];
+        }
+        console.log('Sending MIDI:', msg);
+        midiOutput.send(msg);
     }
 
     function recalculateMidiOutputs() {

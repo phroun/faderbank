@@ -722,6 +722,7 @@ def api_create_button(user, profile_id):
     button_id = create_button(
         profile_id=profile_id,
         label=data.get('label', 'Button'),
+        midi_type=data.get('midi_type', 'cc'),
         midi_cc=data.get('midi_cc', 0),
         on_value=data.get('on_value', 127),
         off_value=data.get('off_value', 0),
@@ -758,6 +759,7 @@ def api_update_button(user, button_id):
     update_button(
         button_id,
         label=data.get('label'),
+        midi_type=data.get('midi_type'),
         midi_cc=data.get('midi_cc'),
         on_value=data.get('on_value'),
         off_value=data.get('off_value'),
@@ -826,6 +828,7 @@ def api_press_button(user, button_id):
         socketio.emit('button_pressed', {
             'button_id': button_id,
             'mode': button['mode'],
+            'midi_type': button['midi_type'],
             'midi_cc': button['midi_cc'],
             'on_value': button['on_value'],
             'off_value': button['off_value'],

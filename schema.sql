@@ -109,9 +109,10 @@ CREATE TABLE button (
     id INT AUTO_INCREMENT PRIMARY KEY,
     profile_id INT NOT NULL,
     label VARCHAR(255) NOT NULL,
-    midi_cc INT NOT NULL,                  -- CC number for button output (0-127)
-    on_value INT DEFAULT 127,              -- CC value when "on" (0-127)
-    off_value INT DEFAULT 0,               -- CC value when "off" (0-127)
+    midi_type ENUM('cc', 'note', 'pc') DEFAULT 'cc',  -- Message type: CC, Note, or Program Change
+    midi_cc INT NOT NULL,                  -- CC/Note/Program number (0-127)
+    on_value INT DEFAULT 127,              -- Value when "on": CC value, note velocity, or program number
+    off_value INT DEFAULT 0,               -- Value when "off": CC value, note velocity, or program number
     mode ENUM('momentary', 'toggle') DEFAULT 'momentary',
     channel_strip_id INT,                  -- NULL for unassigned buttons (shown in left strip)
     display_order INT DEFAULT 0,           -- Order within its strip/unassigned area
