@@ -1206,6 +1206,8 @@
     // Animation Loop
     // ==========================================================================
 
+    let vuDecayFrameCount = 0;
+
     function animationLoop() {
         // Check for pending fader updates
         if (pendingFaderValue !== null && activeFader) {
@@ -1215,14 +1217,18 @@
             }
         }
 
-        // Decay VU levels
+        // Decay VU levels (every 10 frames to reduce flashing)
+        vuDecayFrameCount++;
         let needsRender = false;
-        channels.forEach(channel => {
-            if (channel.vu_level > 0) {
-                channel.vu_level = Math.max(0, channel.vu_level - 3);
-                needsRender = true;
-            }
-        });
+        if (vuDecayFrameCount >= 10) {
+            vuDecayFrameCount = 0;
+            channels.forEach(channel => {
+                if (channel.vu_level > 0) {
+                    channel.vu_level = Math.max(0, channel.vu_level - 1);
+                    needsRender = true;
+                }
+            });
+        }
 
         if (needsRender) {
             render();
