@@ -475,6 +475,37 @@
             ctx.restore();
         }
 
+        // Peak indicator line
+        if (channel.vu_peak !== undefined && channel.vu_peak > 0) {
+            const rawPeak = channel.vu_peak / 127;
+            const peakLevel = Math.pow(rawPeak, 2);  // Same power curve as main meter
+            const peakY = y + height - (height * peakLevel);
+
+            ctx.save();
+            if (isMuted) {
+                ctx.globalAlpha = 0.3;
+            }
+
+            // Color based on peak height (same thresholds as gradient)
+            let peakColor;
+            if (peakLevel > 0.8) {
+                peakColor = '#ef4444';  // Red
+            } else if (peakLevel > 0.6) {
+                peakColor = '#eab308';  // Yellow
+            } else {
+                peakColor = '#22c55e';  // Green
+            }
+
+            ctx.strokeStyle = peakColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + 1, peakY);
+            ctx.lineTo(x + width - 1, peakY);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
         // Border
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 1;
@@ -1300,6 +1331,7 @@
     // ==========================================================================
 
     let vuDecayFrameCount = 0;
+    const VU_PEAK_HOLD_MS = 1500;  // Hold peak for 1.5 seconds before decay
 
     function animationLoop() {
         // Check for pending fader updates
@@ -1310,15 +1342,34 @@
             }
         }
 
-        // Decay VU levels (every 10 frames to reduce flashing)
+        const now = Date.now();
+
+        // Decay VU levels (every 5 frames - doubled speed)
         vuDecayFrameCount++;
         let needsRender = false;
-        if (vuDecayFrameCount >= 10) {
+        if (vuDecayFrameCount >= 5) {
             vuDecayFrameCount = 0;
             channels.forEach(channel => {
+                // Decay main VU level
                 if (channel.vu_level > 0) {
                     channel.vu_level = Math.max(0, channel.vu_level - 1);
                     needsRender = true;
+                }
+
+                // Update peak tracking
+                if (channel.vu_level > (channel.vu_peak || 0)) {
+                    channel.vu_peak = channel.vu_level;
+                    channel.vu_peak_time = now;
+                }
+
+                // Decay peak after hold time expires
+                if (channel.vu_peak > 0) {
+                    const peakAge = now - (channel.vu_peak_time || 0);
+                    if (peakAge > VU_PEAK_HOLD_MS) {
+                        // Faster decay for peak indicator (2 units per cycle)
+                        channel.vu_peak = Math.max(0, channel.vu_peak - 2);
+                        needsRender = true;
+                    }
                 }
             });
         }
