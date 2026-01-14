@@ -1,0 +1,2 @@
+obsws-python>=1.6.0
+pygame>=2.0.0
