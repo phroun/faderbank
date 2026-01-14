@@ -89,6 +89,7 @@
         setupSocket();
         setupMidiControls();
         setupResponsibilityControls();
+        updateResponsibilityUI();
         loadMidiSettings();
         updateOnlineUsersList();
         startPolling();
