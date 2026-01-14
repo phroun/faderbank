@@ -1,0 +1,14 @@
+import pymysql
+from pymysql.cursors import DictCursor
+
+DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'zebby_faderbank',
+    'password': 'REDACTED',
+    'database': 'zebby_faderbank',
+    'charset': 'utf8mb4',
+    'cursorclass': DictCursor
+}
+
+def get_db():
+    return pymysql.connect(**DB_CONFIG)

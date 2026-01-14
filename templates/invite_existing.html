@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Already a Member - Faderbank{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <div class="invite-page">
+        <h1>Already a Member</h1>
+        <p>You already have access to <strong>{{ link.profile_name }}</strong> as a <strong>{{ role }}</strong>.</p>
+        <a href="{{ url_for('view_profile', slug=link.profile_slug) }}" class="btn btn-primary btn-large">Go to Profile</a>
+    </div>
+</div>
+{% endblock %}

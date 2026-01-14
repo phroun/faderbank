@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.name }} - Faderbank{% endblock %}
+
+{% block head %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+{% endblock %}
+
+{% block nav %}
+<nav class="profile-nav">
+    <span class="profile-name">{{ profile.name }}</span>
+    {% if role in ['owner', 'admin', 'technician'] %}
+    <a href="{{ url_for('profile_config', slug=profile.slug) }}" class="nav-link">Configure</a>
+    {% endif %}
+    {% if role == 'owner' %}
+    <a href="{{ url_for('profile_settings', slug=profile.slug) }}" class="nav-link">Settings</a>
+    {% endif %}
+</nav>
+{% endblock %}
+
+{% block top_bar_actions %}
+<div class="midi-controls">
+    <button id="btn-midi-enable" class="btn btn-small">Enable MIDI</button>
+    <button id="btn-midi-config" class="btn btn-small" style="display:none;">MIDI Settings</button>
+    <button id="btn-midi-disable" class="btn btn-small btn-danger" style="display:none;">Disable MIDI</button>
+</div>
+<div class="responsibility-controls">
+    <span id="responsibility-status"></span>
+    <button id="btn-take-responsibility" class="btn btn-small btn-primary">Take Responsibility</button>
+    <button id="btn-drop-responsibility" class="btn btn-small" style="display:none;">Drop Responsibility</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="faderbank-container">
+    <div class="faderbank-main">
+        <canvas id="faderbank-canvas"></canvas>
+    </div>
+    <div class="faderbank-sidebar">
+        <div class="sidebar-section">
+            <h3>Online Users</h3>
+            <ul id="online-users" class="user-list"></ul>
+        </div>
+    </div>
+</div>
+
+<!-- MIDI Config Modal -->
+<div id="midi-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>MIDI Settings</h2>
+        <div class="form-group">
+            <label for="midi-output-device">Output Device</label>
+            <select id="midi-output-device">
+                <option value="">Select MIDI output...</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="midi-input-device">Input Device (VU Meters)</label>
+            <select id="midi-input-device">
+                <option value="">Select MIDI input (optional)...</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="midi-channel">MIDI Channel</label>
+            <select id="midi-channel">
+                {% for i in range(1, 17) %}
+                <option value="{{ i }}">Channel {{ i }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button id="btn-midi-modal-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-midi-modal-save" class="btn btn-primary">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Responsibility Modal -->
+<div id="responsibility-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Take Responsibility?</h2>
+        <p id="responsibility-modal-text"></p>
+        <div class="modal-actions">
+            <button id="btn-responsibility-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-responsibility-confirm" class="btn btn-primary">Yes, Take Responsibility</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Pass data to JavaScript
+window.FADERBANK = {
+    profileId: {{ profile.id }},
+    profileSlug: '{{ profile.slug }}',
+    userId: {{ user.user_id }},
+    displayName: '{{ user.display_name or user.username }}',
+    role: '{{ role }}',
+    channels: {{ channels | tojson }},
+    canOperate: {{ 'true' if role in ['owner', 'admin', 'technician', 'operator'] else 'false' }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/faderbank.js') }}"></script>
+{% endblock %}

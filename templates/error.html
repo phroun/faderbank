@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Error - Faderbank{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <div class="error-page">
+        <h1>Error</h1>
+        <p class="error-message">{{ error }}</p>
+        <a href="/" class="btn btn-primary">Go Home</a>
+    </div>
+</div>
+{% endblock %}

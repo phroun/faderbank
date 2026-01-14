@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Faderbank - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>Your Profiles</h1>
+        <a href="{{ url_for('new_profile') }}" class="btn btn-primary">Create Profile</a>
+    </div>
+
+    {% if profiles %}
+        <div class="profile-grid">
+            {% for profile in profiles %}
+            <a href="{{ url_for('view_profile', slug=profile.slug) }}" class="profile-card">
+                <h3>{{ profile.name }}</h3>
+                <span class="profile-role role-{{ profile.role }}">{{ profile.role }}</span>
+                <span class="profile-slug">/{{ profile.slug }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>You don't have any profiles yet.</p>
+            <p>Create your first profile to get started!</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
