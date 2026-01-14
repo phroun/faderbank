@@ -191,6 +191,19 @@
                         }
                     }
                     // If received level is same as before, let decay continue naturally
+
+                    // Handle right channel VU if present
+                    if (update.vu_level_right !== undefined) {
+                        const prevRight = lastReceivedVu[`${channel.id}_right`];
+                        const newRight = update.vu_level_right;
+                        if (prevRight !== newRight) {
+                            lastReceivedVu[`${channel.id}_right`] = newRight;
+                            if (newRight > (channel.vu_level_right || 0) || channel.vu_level_right === 0) {
+                                channel.vu_level_right = newRight;
+                                needsRender = true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -322,6 +335,9 @@
             const channel = channels.find(c => c.id === data.channel_id);
             if (channel) {
                 channel.vu_level = data.level;
+                if (data.level_right !== undefined) {
+                    channel.vu_level_right = data.level_right;
+                }
                 // Don't call render() here - animation loop handles it
             }
         });
@@ -505,15 +521,34 @@
     }
 
     function renderVUMeter(channel, x, y, width, height, isMuted) {
+        const isStereo = channel.midi_cc_vu_input_right !== null && channel.midi_cc_vu_input_right !== undefined;
+
         // Background
         ctx.fillStyle = '#0a0a15';
         ctx.fillRect(x, y, width, height);
 
-        if (channel.vu_level !== undefined && channel.vu_level > 0) {
+        if (isStereo) {
+            // Stereo: two bars side by side
+            const barWidth = Math.floor((width - 1) / 2);  // 1px gap in middle
+            renderVUBar(channel.vu_level, channel.vu_peak, x, y, barWidth, height, isMuted);
+            renderVUBar(channel.vu_level_right, channel.vu_peak_right, x + barWidth + 1, y, barWidth, height, isMuted);
+        } else {
+            // Mono: single bar
+            renderVUBar(channel.vu_level, channel.vu_peak, x, y, width, height, isMuted);
+        }
+
+        // Border
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, width, height);
+    }
+
+    function renderVUBar(level, peak, x, y, width, height, isMuted) {
+        if (level !== undefined && level > 0) {
             // Apply power curve to compress quiet values (counteracts dB boost from source)
-            const rawLevel = channel.vu_level / 127;
-            const level = Math.pow(rawLevel, 2);  // Square to compress quiet signals
-            const meterHeight = height * level;
+            const rawLevel = level / 127;
+            const normalizedLevel = Math.pow(rawLevel, 2);  // Square to compress quiet signals
+            const meterHeight = height * normalizedLevel;
 
             // Save context for alpha manipulation
             ctx.save();
@@ -538,8 +573,8 @@
         }
 
         // Peak indicator line
-        if (channel.vu_peak !== undefined && channel.vu_peak > 0) {
-            const rawPeak = channel.vu_peak / 127;
+        if (peak !== undefined && peak > 0) {
+            const rawPeak = peak / 127;
             const peakLevel = Math.pow(rawPeak, 2);  // Same power curve as main meter
             const peakY = y + height - (height * peakLevel);
 
@@ -559,7 +594,7 @@
             }
 
             ctx.strokeStyle = peakColor;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(x + 1, peakY);
             ctx.lineTo(x + width - 1, peakY);
@@ -567,11 +602,6 @@
 
             ctx.restore();
         }
-
-        // Border
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, width, height);
     }
 
     function renderFaderTrack(channel, x, y, width, height, isMuted, color) {
@@ -1256,17 +1286,23 @@
         const expectedStatus = 0xB0 + (midiChannel - 1);
         if (status !== expectedStatus) return;
 
-        // Find channel by VU CC
-        const channel = channels.find(c => c.midi_cc_vu_input === cc);
+        // Find channel by VU CC (left/mono or right)
+        let channel = channels.find(c => c.midi_cc_vu_input === cc);
+        let isRight = false;
+        if (!channel) {
+            channel = channels.find(c => c.midi_cc_vu_input_right === cc);
+            isRight = true;
+        }
         if (!channel) return;
 
         // Track peak value
         const now = Date.now();
-        if (!vuPeaks[channel.id]) {
-            vuPeaks[channel.id] = { peak: 0, lastUpdate: 0 };
+        const peakKey = isRight ? `${channel.id}_right` : channel.id;
+        if (!vuPeaks[peakKey]) {
+            vuPeaks[peakKey] = { peak: 0, lastUpdate: 0 };
         }
 
-        const peak = vuPeaks[channel.id];
+        const peak = vuPeaks[peakKey];
         peak.peak = Math.max(peak.peak, value);
 
         // Mark this channel as receiving local VU (don't overwrite from polling)
@@ -1274,10 +1310,21 @@
 
         // Send peak every 100ms
         if (now - peak.lastUpdate >= VU_PEAK_INTERVAL) {
-            channel.vu_level = peak.peak;
+            if (isRight) {
+                channel.vu_level_right = peak.peak;
+            } else {
+                channel.vu_level = peak.peak;
+            }
 
-            // Buffer for broadcast to server
-            vuBuffer[channel.id] = peak.peak;
+            // Buffer for broadcast to server (stereo format if right channel exists)
+            if (!vuBuffer[channel.id]) {
+                vuBuffer[channel.id] = { left: channel.vu_level || 0 };
+            }
+            if (isRight) {
+                vuBuffer[channel.id].right = peak.peak;
+            } else {
+                vuBuffer[channel.id].left = peak.peak;
+            }
             scheduleVuBroadcast();
 
             peak.peak = 0;
@@ -1562,24 +1609,45 @@
         if (vuDecayFrameCount >= 5) {
             vuDecayFrameCount = 0;
             channels.forEach(channel => {
-                // Decay main VU level
+                // Decay main VU level (left/mono)
                 if (channel.vu_level > 0) {
                     channel.vu_level = Math.max(0, channel.vu_level - 1);
                     needsRender = true;
                 }
 
-                // Update peak tracking
+                // Decay right VU level (if stereo)
+                if (channel.vu_level_right > 0) {
+                    channel.vu_level_right = Math.max(0, channel.vu_level_right - 1);
+                    needsRender = true;
+                }
+
+                // Update peak tracking (left/mono)
                 if (channel.vu_level > (channel.vu_peak || 0)) {
                     channel.vu_peak = channel.vu_level;
                     channel.vu_peak_time = now;
                 }
 
-                // Decay peak after hold time expires
+                // Update peak tracking (right)
+                if (channel.vu_level_right > (channel.vu_peak_right || 0)) {
+                    channel.vu_peak_right = channel.vu_level_right;
+                    channel.vu_peak_right_time = now;
+                }
+
+                // Decay peak after hold time expires (left/mono)
                 if (channel.vu_peak > 0) {
                     const peakAge = now - (channel.vu_peak_time || 0);
                     if (peakAge > VU_PEAK_HOLD_MS) {
                         // Faster decay for peak indicator (2 units per cycle)
                         channel.vu_peak = Math.max(0, channel.vu_peak - 2);
+                        needsRender = true;
+                    }
+                }
+
+                // Decay peak after hold time expires (right)
+                if (channel.vu_peak_right > 0) {
+                    const peakAge = now - (channel.vu_peak_right_time || 0);
+                    if (peakAge > VU_PEAK_HOLD_MS) {
+                        channel.vu_peak_right = Math.max(0, channel.vu_peak_right - 2);
                         needsRender = true;
                     }
                 }

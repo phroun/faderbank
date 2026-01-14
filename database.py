@@ -527,7 +527,7 @@ def get_channel_strip(channel_id):
 
 
 def create_channel_strip(profile_id, name, position, color='white',
-                         midi_cc_output=0, midi_cc_vu_input=None,
+                         midi_cc_output=0, midi_cc_vu_input=None, midi_cc_vu_input_right=None,
                          midi_cc_mute=None, midi_cc_solo=None,
                          min_level=0, max_level=127):
     """Create a new channel strip."""
@@ -538,10 +538,10 @@ def create_channel_strip(profile_id, name, position, color='white',
         cursor.execute(
             """INSERT INTO channel_strip
                (profile_id, name, position, color, midi_cc_output, midi_cc_vu_input,
-                midi_cc_mute, midi_cc_solo, min_level, max_level)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, min_level, max_level)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (profile_id, name, position, color, midi_cc_output, midi_cc_vu_input,
-             midi_cc_mute, midi_cc_solo, min_level, max_level)
+             midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, min_level, max_level)
         )
         db.commit()
         return cursor.lastrowid
@@ -559,7 +559,7 @@ def update_channel_strip(channel_id, **kwargs):
     cursor = db.cursor()
 
     allowed_fields = ['name', 'position', 'color', 'midi_cc_output', 'midi_cc_vu_input',
-                      'midi_cc_mute', 'midi_cc_solo', 'min_level', 'max_level',
+                      'midi_cc_vu_input_right', 'midi_cc_mute', 'midi_cc_solo', 'min_level', 'max_level',
                       'current_level', 'is_muted', 'is_solo']
 
     updates = []
@@ -679,16 +679,36 @@ def update_vu_level(channel_id, level):
 
 
 def update_vu_levels_bulk(profile_id, vu_data):
-    """Update multiple VU levels at once. vu_data is {channel_id: level}."""
+    """Update multiple VU levels at once.
+    vu_data can be:
+      - {channel_id: level} for mono/left only
+      - {channel_id: {'left': level, 'right': level}} for stereo
+    """
     db = get_db()
     cursor = db.cursor()
 
     try:
-        for channel_id, level in vu_data.items():
-            cursor.execute(
-                "UPDATE channel_strip SET vu_level = %s WHERE id = %s AND profile_id = %s",
-                (level, channel_id, profile_id)
-            )
+        for channel_id, level_data in vu_data.items():
+            if isinstance(level_data, dict):
+                # Stereo format: {'left': level, 'right': level}
+                left = level_data.get('left', 0)
+                right = level_data.get('right')
+                if right is not None:
+                    cursor.execute(
+                        "UPDATE channel_strip SET vu_level = %s, vu_level_right = %s WHERE id = %s AND profile_id = %s",
+                        (left, right, channel_id, profile_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE channel_strip SET vu_level = %s WHERE id = %s AND profile_id = %s",
+                        (left, channel_id, profile_id)
+                    )
+            else:
+                # Simple format: just the level value
+                cursor.execute(
+                    "UPDATE channel_strip SET vu_level = %s WHERE id = %s AND profile_id = %s",
+                    (level_data, channel_id, profile_id)
+                )
         db.commit()
     finally:
         cursor.close()

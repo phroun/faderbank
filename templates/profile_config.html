@@ -37,8 +37,12 @@
                     <input type="number" class="channel-cc-output" value="{{ channel.midi_cc_output }}" min="0" max="127">
                 </div>
                 <div class="config-field">
-                    <label>VU CC</label>
+                    <label>VU L/Mono</label>
                     <input type="number" class="channel-cc-vu" value="{{ channel.midi_cc_vu_input or '' }}" min="0" max="127" placeholder="None">
+                </div>
+                <div class="config-field">
+                    <label>VU Right</label>
+                    <input type="number" class="channel-cc-vu-right" value="{{ channel.midi_cc_vu_input_right or '' }}" min="0" max="127" placeholder="None">
                 </div>
                 <div class="config-field">
                     <label>Mute CC</label>
@@ -219,6 +223,7 @@ document.querySelectorAll('.btn-save-channel').forEach(btn => {
             color: item.querySelector('.channel-color').value,
             midi_cc_output: parseInt(item.querySelector('.channel-cc-output').value) || 0,
             midi_cc_vu_input: parseInt(item.querySelector('.channel-cc-vu').value) || null,
+            midi_cc_vu_input_right: parseInt(item.querySelector('.channel-cc-vu-right').value) || null,
             midi_cc_mute: parseInt(item.querySelector('.channel-cc-mute').value) || null,
             midi_cc_solo: parseInt(item.querySelector('.channel-cc-solo').value) || null,
             min_level: parseInt(item.querySelector('.channel-min').value) || 0,

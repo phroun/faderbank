@@ -407,14 +407,18 @@ def api_get_profile_state(user, profile_id):
     # Convert to JSON-safe format (handle datetime fields)
     channel_states = []
     for ch in channels:
-        channel_states.append({
+        state = {
             'id': ch['id'],
             'current_level': ch['current_level'],
             'is_muted': bool(ch['is_muted']),
             'is_solo': bool(ch['is_solo']),
             'version': ch.get('state_version') or 0,
             'vu_level': ch.get('vu_level') or 0
-        })
+        }
+        # Include right VU level if channel has stereo VU configured
+        if ch.get('midi_cc_vu_input_right'):
+            state['vu_level_right'] = ch.get('vu_level_right') or 0
+        channel_states.append(state)
 
     # Get responsibility info
     resp = get_responsibility(profile_id)
@@ -593,6 +597,7 @@ def api_create_channel(user, profile_id):
         color=data.get('color', 'white'),
         midi_cc_output=data.get('midi_cc_output', position),
         midi_cc_vu_input=data.get('midi_cc_vu_input'),
+        midi_cc_vu_input_right=data.get('midi_cc_vu_input_right'),
         midi_cc_mute=data.get('midi_cc_mute'),
         midi_cc_solo=data.get('midi_cc_solo'),
         min_level=data.get('min_level', 0),
@@ -629,6 +634,7 @@ def api_update_channel(user, channel_id):
         color=data.get('color'),
         midi_cc_output=data.get('midi_cc_output'),
         midi_cc_vu_input=data.get('midi_cc_vu_input'),
+        midi_cc_vu_input_right=data.get('midi_cc_vu_input_right'),
         midi_cc_mute=data.get('midi_cc_mute'),
         midi_cc_solo=data.get('midi_cc_solo'),
         min_level=data.get('min_level'),
@@ -1241,6 +1247,7 @@ def handle_vu_level(data):
     """Handle VU level update (from MIDI input)."""
     channel_id = data.get('channel_id')
     level = data.get('level')
+    level_right = data.get('level_right')  # Optional, for stereo
 
     if channel_id is None or level is None:
         return
@@ -1250,10 +1257,13 @@ def handle_vu_level(data):
         return
 
     # Broadcast to room (no permission check - VU is input only)
-    emit('vu_update', {
+    vu_data = {
         'channel_id': channel_id,
         'level': level
-    }, room=f'profile_{channel["profile_id"]}', include_self=False)
+    }
+    if level_right is not None:
+        vu_data['level_right'] = level_right
+    emit('vu_update', vu_data, room=f'profile_{channel["profile_id"]}', include_self=False)
 
 
 @socketio.on('take_responsibility')

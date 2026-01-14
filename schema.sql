@@ -61,7 +61,8 @@ CREATE TABLE channel_strip (
     position INT NOT NULL,                 -- Order in the fader bank (0-based)
     color ENUM('red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'white') DEFAULT 'white',
     midi_cc_output INT NOT NULL,           -- CC number for fader output (0-127)
-    midi_cc_vu_input INT,                  -- CC number for VU level input (NULL if not used)
+    midi_cc_vu_input INT,                  -- CC number for VU level input left/mono (NULL if not used)
+    midi_cc_vu_input_right INT,            -- CC number for VU level input right (NULL for mono)
     midi_cc_mute INT,                      -- CC number for mute button (NULL if not used)
     midi_cc_solo INT,                      -- CC number for solo button (NULL if not used)
     min_level INT DEFAULT 0,               -- Minimum fader value (0-127)
@@ -70,7 +71,8 @@ CREATE TABLE channel_strip (
     is_muted BOOLEAN DEFAULT FALSE,        -- Mute button state
     is_solo BOOLEAN DEFAULT FALSE,         -- Solo button state
     state_version INT DEFAULT 0,           -- Increments on every state change (level/mute/solo)
-    vu_level INT DEFAULT 0,                -- Current VU meter level (0-127, ephemeral)
+    vu_level INT DEFAULT 0,                -- Current VU meter level left/mono (0-127, ephemeral)
+    vu_level_right INT DEFAULT 0,          -- Current VU meter level right (0-127, ephemeral)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (profile_id) REFERENCES profile(id) ON DELETE CASCADE,
