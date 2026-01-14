@@ -568,9 +568,8 @@
         canvas.addEventListener('mouseup', handlePointerUp);
         canvas.addEventListener('mouseleave', handlePointerUp);
 
-        // Touch events
+        // Touch events - only touchstart initially, touchmove added dynamically when dragging
         canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
         canvas.addEventListener('touchend', handleTouchEnd);
         canvas.addEventListener('touchcancel', handleTouchEnd);
 
@@ -635,13 +634,17 @@
             if (hit) {
                 e.preventDefault();
                 handlePointerDown({ clientX: touch.clientX, clientY: touch.clientY });
+
+                // Add touchmove listener only when dragging a fader
+                if (hit.type === 'fader') {
+                    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+                }
             }
             // Otherwise allow normal touch behavior (scrolling)
         }
     }
 
     function handleTouchMove(e) {
-        // Only prevent scrolling if actively dragging a fader
         if (e.touches.length === 1 && activeFader) {
             e.preventDefault();
             const touch = e.touches[0];
@@ -651,6 +654,8 @@
     }
 
     function handleTouchEnd(e) {
+        // Remove touchmove listener when touch ends
+        canvas.removeEventListener('touchmove', handleTouchMove);
         handlePointerUp(e);
     }
 
