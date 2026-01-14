@@ -33,7 +33,7 @@
 
     // State
     let channels = [...config.channels];
-    let onlineUsers = {};
+    let onlineUsers = config.initialOnlineUsers || {};
     let responsibilityUser = null;
     let socket = null;
     let canvas = null;
@@ -69,6 +69,7 @@
         setupMidiControls();
         setupResponsibilityControls();
         loadMidiSettings();
+        updateOnlineUsersList();
 
         render();
 

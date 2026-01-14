@@ -39,7 +39,9 @@
     <div class="faderbank-sidebar">
         <div class="sidebar-section">
             <h3>Online Users</h3>
-            <ul id="online-users" class="user-list"></ul>
+            <ul id="online-users" class="user-list">
+                <li data-user-id="{{ user.user_id }}">{{ user.display_name }} (you)</li>
+            </ul>
         </div>
     </div>
 </div>
@@ -98,7 +100,8 @@ window.FADERBANK = {
     displayName: '{{ user.display_name or user.username }}',
     role: '{{ role }}',
     channels: {{ channels | tojson }},
-    canOperate: {{ 'true' if role in ['owner', 'admin', 'technician', 'operator'] else 'false' }}
+    canOperate: {{ 'true' if role in ['owner', 'admin', 'technician', 'operator'] else 'false' }},
+    initialOnlineUsers: { {{ user.user_id }}: { display_name: '{{ user.display_name or user.username }}' } }
 };
 </script>
 <script src="{{ url_for('static', filename='js/faderbank.js') }}"></script>
