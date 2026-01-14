@@ -103,7 +103,9 @@
     // ==========================================================================
 
     function setupSocket() {
-        socket = io();
+        // Using polling transport for mod_wsgi compatibility
+        // Remove {transports: ['polling']} to enable WebSocket when using gunicorn+eventlet
+        socket = io({transports: ['polling']});
 
         socket.on('connect', () => {
             socket.emit('join_profile', {
