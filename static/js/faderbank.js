@@ -244,7 +244,29 @@
         const buttonsStripWidth = unassignedButtons.length > 0 ? STRIP_WIDTH + STRIP_PADDING : 0;
         const minWidth = buttonsStripWidth + channels.length * (STRIP_WIDTH + STRIP_PADDING) + STRIP_PADDING;
         const width = Math.max(rect.width, minWidth);
-        const height = rect.height;
+
+        // Calculate required height based on content
+        // Base height: fader + mute/solo buttons + dB label
+        const baseChannelHeight = FADER_TOP + FADER_HEIGHT + 20 + BUTTON_SIZE + 35;
+
+        // Find the channel with the most custom buttons to determine max height
+        let maxChannelButtons = 0;
+        channels.forEach(ch => {
+            const channelButtons = buttons.filter(b => b.channel_strip_id === ch.id);
+            maxChannelButtons = Math.max(maxChannelButtons, channelButtons.length);
+        });
+
+        // Height needed for channel strips (with their custom buttons)
+        const channelStripHeight = baseChannelHeight + maxChannelButtons * (CUSTOM_BUTTON_HEIGHT + CUSTOM_BUTTON_GAP);
+
+        // Height needed for unassigned buttons strip
+        const buttonsStripHeight = unassignedButtons.length > 0
+            ? FADER_TOP + unassignedButtons.length * (CUSTOM_BUTTON_HEIGHT + CUSTOM_BUTTON_GAP)
+            : 0;
+
+        // Minimum height is the max of channel strip height, buttons strip height, plus padding
+        const minHeight = Math.max(channelStripHeight, buttonsStripHeight) + 20;
+        const height = Math.max(rect.height, minHeight);
 
         // Set canvas size with device pixel ratio for sharp rendering
         const dpr = window.devicePixelRatio || 1;
