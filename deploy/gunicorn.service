@@ -4,11 +4,11 @@ After=network.target mariadb.service
 Wants=mariadb.service
 
 [Service]
-User=faderbank
-Group=faderbank
-WorkingDirectory=/opt/faderbank
-Environment="PATH=/opt/faderbank/venv/bin"
-ExecStart=/opt/faderbank/venv/bin/gunicorn --worker-class eventlet -w 1 -b 127.0.0.1:5000 --access-logfile /var/log/faderbank/access.log --error-logfile /var/log/faderbank/error.log wsgi:app
+User=apache
+Group=apache
+WorkingDirectory=/var/www/zebby/faderbank
+Environment="PATH=/var/www/zebby/faderbank/venv/bin"
+ExecStart=/var/www/zebby/faderbank/venv/bin/gunicorn --worker-class eventlet -w 1 -b 127.0.0.1:5000 --access-logfile /var/log/faderbank/access.log --error-logfile /var/log/faderbank/error.log wsgi:app
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
 RestartSec=5
