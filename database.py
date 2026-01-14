@@ -744,11 +744,12 @@ def take_responsibility(profile_id, user_id):
     cursor = db.cursor()
 
     try:
+        # Use INSERT ... ON DUPLICATE KEY UPDATE to handle missing rows
         cursor.execute(
-            """UPDATE profile_responsibility
-               SET user_id = %s, taken_at = NOW()
-               WHERE profile_id = %s""",
-            (user_id, profile_id)
+            """INSERT INTO profile_responsibility (profile_id, user_id, taken_at)
+               VALUES (%s, %s, NOW())
+               ON DUPLICATE KEY UPDATE user_id = %s, taken_at = NOW()""",
+            (profile_id, user_id, user_id)
         )
         db.commit()
     finally:
