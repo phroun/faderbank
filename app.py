@@ -119,13 +119,23 @@ def slugify(text):
 @app.route('/debug')
 def debug():
     """Debug route to check request values."""
+    return_url = request.script_root + request.path
+    redirect_url = f'/login?return_to={return_url}'
     return jsonify({
         'script_root': request.script_root,
         'path': request.path,
         'full_path': request.full_path,
         'url': request.url,
-        'combined': request.script_root + request.path
+        'combined': return_url,
+        'redirect_would_be': redirect_url
     })
+
+
+@app.route('/debug/redirect')
+def debug_redirect():
+    """Test the actual redirect."""
+    return_url = request.script_root + '/'
+    return redirect(f'/login?return_to={return_url}')
 
 
 @app.route('/')
