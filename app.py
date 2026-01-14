@@ -424,9 +424,12 @@ def api_update_channel(user, channel_id):
 
     updated_channel = get_channel_strip(channel_id)
 
-    # Notify all users
-    socketio.emit('channel_updated', {'channel': dict(updated_channel)},
-                  room=f'profile_{channel["profile_id"]}')
+    # Notify all users (non-fatal if it fails under mod_wsgi)
+    try:
+        socketio.emit('channel_updated', {'channel': dict(updated_channel)},
+                      room=f'profile_{channel["profile_id"]}')
+    except Exception as e:
+        logging.warning(f"Failed to emit channel_updated: {e}")
 
     return jsonify({'success': True})
 
@@ -446,8 +449,11 @@ def api_delete_channel(user, channel_id):
     profile_id = channel['profile_id']
     delete_channel_strip(channel_id)
 
-    # Notify all users
-    socketio.emit('channel_deleted', {'channel_id': channel_id}, room=f'profile_{profile_id}')
+    # Notify all users (non-fatal if it fails under mod_wsgi)
+    try:
+        socketio.emit('channel_deleted', {'channel_id': channel_id}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit channel_deleted: {e}")
 
     return jsonify({'success': True})
 
@@ -465,8 +471,11 @@ def api_reorder_channels(user, profile_id):
 
     reorder_channel_strips(profile_id, channel_order)
 
-    # Notify all users
-    socketio.emit('channels_reordered', {'order': channel_order}, room=f'profile_{profile_id}')
+    # Notify all users (non-fatal if it fails under mod_wsgi)
+    try:
+        socketio.emit('channels_reordered', {'order': channel_order}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit channels_reordered: {e}")
 
     return jsonify({'success': True})
 
@@ -508,11 +517,14 @@ def api_update_member_role(user, profile_id, member_user_id):
 
     update_member_role(profile_id, member_user_id, new_role)
 
-    # Notify via WebSocket
-    socketio.emit('member_updated', {
-        'user_id': member_user_id,
-        'role': new_role
-    }, room=f'profile_{profile_id}')
+    # Notify via WebSocket (non-fatal if it fails under mod_wsgi)
+    try:
+        socketio.emit('member_updated', {
+            'user_id': member_user_id,
+            'role': new_role
+        }, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit member_updated: {e}")
 
     return jsonify({'success': True})
 
@@ -540,8 +552,11 @@ def api_remove_member(user, profile_id, member_user_id):
 
     remove_profile_member(profile_id, member_user_id)
 
-    # Notify via WebSocket
-    socketio.emit('member_removed', {'user_id': member_user_id}, room=f'profile_{profile_id}')
+    # Notify via WebSocket (non-fatal if it fails under mod_wsgi)
+    try:
+        socketio.emit('member_removed', {'user_id': member_user_id}, room=f'profile_{profile_id}')
+    except Exception as e:
+        logging.warning(f"Failed to emit member_removed: {e}")
 
     return jsonify({'success': True})
 
