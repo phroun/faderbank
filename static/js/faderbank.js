@@ -436,7 +436,9 @@
         ctx.fillRect(x, y, width, height);
 
         if (channel.vu_level !== undefined && channel.vu_level > 0) {
-            const level = channel.vu_level / 127;
+            // Apply power curve to compress quiet values (counteracts dB boost from source)
+            const rawLevel = channel.vu_level / 127;
+            const level = Math.pow(rawLevel, 2);  // Square to compress quiet signals
             const meterHeight = height * level;
 
             // Save context for alpha manipulation
