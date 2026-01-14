@@ -180,6 +180,41 @@ When authenticated, `get_zebby_user_info()` returns:
 3. Zebby handles the WebAuthn flow
 4. User is redirected back to `return_to` URL with valid `zebby_session` cookie
 
+### Important: Building the return_to URL
+
+When using `WSGIScriptAlias` to mount your app at a subpath (e.g., `/yourservice`), Flask's `request.path` only returns the path *relative* to the mount point, not the full path.
+
+For example, if your app is mounted at `/yourservice` and the user visits `/yourservice/dashboard`:
+- `request.path` returns `/dashboard` (not `/yourservice/dashboard`)
+- `request.url` returns the full URL but may cause issues if not URL-encoded
+
+**Use `request.script_root + request.path`** to get the correct full path:
+
+```python
+from functools import wraps
+
+def require_login(f):
+    """Decorator to require login."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = get_zebby_user_info()
+        if not user:
+            # request.script_root = '/yourservice' (the WSGIScriptAlias mount point)
+            # request.path = '/dashboard' (path relative to mount point)
+            # Combined = '/yourservice/dashboard'
+            return_url = request.script_root + request.path
+            return redirect(f'/login?return_to={return_url}')
+        return f(user=user, *args, **kwargs)
+    return decorated_function
+```
+
+| Method | Value at `/yourservice/dashboard` | Use Case |
+|--------|-----------------------------------|----------|
+| `request.path` | `/dashboard` | Within-app routing |
+| `request.script_root` | `/yourservice` | The WSGI mount point |
+| `request.script_root + request.path` | `/yourservice/dashboard` | Login return URLs |
+| `request.url` | `https://zebby.org/yourservice/dashboard` | Full URL (needs encoding) |
+
 ## Step 6: Database Schema
 
 Your service needs at minimum a `user` table to track users locally:
@@ -364,10 +399,27 @@ def get_zebby_user_info():
 ### wsgi.py
 ```python
 #!/usr/bin/env python3
-from app import app
+import sys
+import os
 
-if __name__ == '__main__':
-    app.run()
+# Add application directory to Python path (required for mod_wsgi)
+sys.path.insert(0, os.path.dirname(__file__))
+
+from app import app as application
+```
+
+**Note:** The variable must be named `application` for mod_wsgi compatibility. The `sys.path.insert` line is required because mod_wsgi doesn't automatically add your app directory to the Python path.
+
+### Apache Configuration
+
+```apache
+WSGIDaemonProcess zebby_yourservice python-home=/var/www/zebby/yourservice/venv
+WSGIProcessGroup zebby_yourservice
+WSGIScriptAlias /yourservice /var/www/zebby/yourservice/wsgi.py
+
+<Directory /var/www/zebby/yourservice>
+    Require all granted
+</Directory>
 ```
 
 ## Zebby API Endpoints
