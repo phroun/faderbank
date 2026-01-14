@@ -24,8 +24,25 @@ from database import (
     update_profile_activity, get_active_users
 )
 
+
+class ReverseProxyMiddleware:
+    """Middleware to handle reverse proxy path prefix."""
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
+        if script_name:
+            environ['SCRIPT_NAME'] = script_name
+            path_info = environ.get('PATH_INFO', '')
+            if path_info.startswith(script_name):
+                environ['PATH_INFO'] = path_info[len(script_name):]
+        return self.app(environ, start_response)
+
+
 app = Flask(__name__)
 app.secret_key = APP_SECRET_KEY
+app.wsgi_app = ReverseProxyMiddleware(app.wsgi_app)
 
 # Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
