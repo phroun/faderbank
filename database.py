@@ -3,6 +3,7 @@
 import requests
 import secrets
 import json
+import logging
 from datetime import datetime, timedelta
 from flask import request
 from config.db import get_db
@@ -30,8 +31,11 @@ def get_zebby_user_info():
 
         user_data = response.json()
 
-        # Sync user to local database
-        sync_user(user_data)
+        # Sync user to local database (non-fatal if it fails)
+        try:
+            sync_user(user_data)
+        except Exception as e:
+            logging.error(f"Failed to sync user to database: {e}")
 
         return user_data
     except:
