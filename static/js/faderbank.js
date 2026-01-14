@@ -1268,6 +1268,8 @@
 
     function createUserListItem(user) {
         const li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
         const secondsAgo = user.seconds_ago || 0;
 
         // Determine activity state:
@@ -1299,10 +1301,8 @@
             prefix = '🔧 ';
         }
 
-        // Add responsibility emoji after role emoji
         if (hasResponsibility) {
             name.className = 'user-has-responsibility';
-            prefix += '🎛️ ';
         }
 
         name.textContent = prefix + user.display_name;
@@ -1314,6 +1314,18 @@
             youSpan.className = 'user-you-indicator';
             youSpan.textContent = ' (you)';
             li.appendChild(youSpan);
+        }
+
+        // Add responsibility emoji at far right
+        if (hasResponsibility) {
+            const spacer = document.createElement('span');
+            spacer.style.flexGrow = '1';
+            li.appendChild(spacer);
+
+            const respEmoji = document.createElement('span');
+            respEmoji.textContent = '🎛️';
+            respEmoji.title = 'Has responsibility';
+            li.appendChild(respEmoji);
         }
 
         return li;
