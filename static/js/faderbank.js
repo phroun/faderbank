@@ -1241,23 +1241,19 @@
 
         // Determine activity state:
         // - Active (green dot): seen in last 30 seconds
-        // - Inactive (no dot): seen 30 seconds to 3 minutes ago
-        // - Faded (no dot, faded name): seen more than 3 minutes ago
+        // - Inactive (gray dot): seen 30 seconds to 3 minutes ago
+        // - Faded (gray dot, faded name): seen more than 3 minutes ago
         const isActive = secondsAgo <= 30;
         const isFaded = secondsAgo > 180; // 3 minutes
 
         if (isFaded) {
             li.className = 'user-inactive-faded';
-        } else if (!isActive) {
-            li.className = 'user-inactive';
         }
 
-        // Only show green dot if active
-        if (isActive) {
-            const indicator = document.createElement('span');
-            indicator.className = 'user-online-indicator';
-            li.appendChild(indicator);
-        }
+        // Always show dot, but change color based on status
+        const indicator = document.createElement('span');
+        indicator.className = isActive ? 'user-online-indicator' : 'user-offline-indicator';
+        li.appendChild(indicator);
 
         const name = document.createElement('span');
         const hasResponsibility = responsibilityUser && responsibilityUser.user_id === parseInt(user.id);

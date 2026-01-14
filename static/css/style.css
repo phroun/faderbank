@@ -400,15 +400,20 @@ body {
     height: 8px;
     border-radius: 50%;
     background-color: var(--accent-success);
+    flex-shrink: 0;
+}
+
+.user-offline-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #555;
+    flex-shrink: 0;
 }
 
 .user-has-responsibility {
     color: var(--accent-warning);
     font-weight: 600;
-}
-
-.user-inactive {
-    /* Recently inactive - no green dot but normal text */
 }
 
 .user-inactive-faded {
