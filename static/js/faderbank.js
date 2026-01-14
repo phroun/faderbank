@@ -1025,7 +1025,7 @@
         if (!midiOutput || !midiEnabled || !channel.midi_cc_mute) return;
 
         const status = 0xB0 + (midiChannel - 1);
-        const value = channel.is_muted ? 0 : 127;  // 0 = muted, 127 = unmuted
+        const value = channel.is_muted ? 127 : 0;
         midiOutput.send([status, channel.midi_cc_mute, value]);
     }
 
