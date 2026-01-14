@@ -163,8 +163,8 @@ class MidiToClick:
 
                         # Check if this is our target CC on our channel
                         if channel == self.midi_channel and cc_num == self.cc_number:
-                            # Trigger on rising edge above threshold
-                            if cc_val >= self.threshold and self.last_cc_value < self.threshold:
+                            # Trigger on rising edge above threshold (only on positive values)
+                            if cc_val > 0 and cc_val >= self.threshold and self.last_cc_value < self.threshold:
                                 print(f"Triggered! CC {cc_num} = {cc_val}")
                                 self.perform_click_action()
 
