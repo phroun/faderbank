@@ -382,6 +382,7 @@
 
         // Button events
         socket.on('button_pressed', (data) => {
+            console.log('Received button_pressed event:', data);
             // Update local button state for toggle buttons
             const btn = buttons.find(b => b.id === data.button_id);
             if (btn && data.new_state !== null) {
@@ -390,6 +391,7 @@
             render();
 
             // Send MIDI if enabled
+            console.log('MIDI output enabled:', midiEnabled, 'midiOutput:', midiOutput ? 'connected' : 'none');
             if (midiOutput && midiEnabled) {
                 sendButtonMidi(data);
             }
@@ -871,12 +873,14 @@
     }
 
     async function pressButton(btn) {
+        console.log('Button clicked:', btn.label, 'id:', btn.id, 'bounds:', btn._bounds);
         try {
             const response = await fetch(`${BASE_URL}/api/button/${btn.id}/press`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
             const data = await response.json();
+            console.log('Button press response:', data);
             if (!data.success) {
                 console.error('Failed to press button:', data.error);
             }
@@ -1193,18 +1197,22 @@
         if (!midiOutput || !midiEnabled) return;
 
         const status = 0xB0 + (midiChannel - 1);
+        console.log('sendButtonMidi:', data.mode, 'CC:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
 
         if (data.mode === 'momentary') {
             // Momentary: send on_value, then off_value after short delay
+            console.log('Sending momentary MIDI:', [status, data.midi_cc, data.on_value]);
             midiOutput.send([status, data.midi_cc, data.on_value]);
             setTimeout(() => {
                 if (midiOutput && midiEnabled) {
+                    console.log('Sending momentary off MIDI:', [status, data.midi_cc, data.off_value]);
                     midiOutput.send([status, data.midi_cc, data.off_value]);
                 }
             }, 50);
         } else {
             // Toggle: send based on new_state
             const value = data.new_state ? data.on_value : data.off_value;
+            console.log('Sending toggle MIDI:', [status, data.midi_cc, value]);
             midiOutput.send([status, data.midi_cc, value]);
         }
     }
