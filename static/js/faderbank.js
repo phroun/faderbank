@@ -225,8 +225,10 @@
         const container = canvas.parentElement;
         const rect = container.getBoundingClientRect();
 
-        // Calculate required width
-        const minWidth = channels.length * (STRIP_WIDTH + STRIP_PADDING) + STRIP_PADDING;
+        // Calculate required width (account for buttons strip if present)
+        const unassignedButtons = buttons.filter(b => !b.channel_strip_id);
+        const buttonsStripWidth = unassignedButtons.length > 0 ? STRIP_WIDTH + STRIP_PADDING : 0;
+        const minWidth = buttonsStripWidth + channels.length * (STRIP_WIDTH + STRIP_PADDING) + STRIP_PADDING;
         const width = Math.max(rect.width, minWidth);
         const height = rect.height;
 
