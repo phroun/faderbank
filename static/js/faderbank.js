@@ -55,6 +55,11 @@
     const vuPeaks = {};  // channel_id -> {peak, lastUpdate}
     const VU_PEAK_INTERVAL = 100;  // 100ms
 
+    // Polling state
+    const POLL_INTERVAL = 500;  // Poll every 500ms
+    let pollTimer = null;
+    let isPolling = false;
+
     // ==========================================================================
     // Initialization
     // ==========================================================================
@@ -70,11 +75,100 @@
         setupResponsibilityControls();
         loadMidiSettings();
         updateOnlineUsersList();
+        startPolling();
 
         render();
 
         // Start animation loop
         requestAnimationFrame(animationLoop);
+    }
+
+    // ==========================================================================
+    // State Polling (for mod_wsgi compatibility)
+    // ==========================================================================
+
+    function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(pollState, POLL_INTERVAL);
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    async function pollState() {
+        if (isPolling) return;  // Skip if previous poll still in progress
+        isPolling = true;
+
+        try {
+            const response = await fetch(`${window.BASE_URL}/api/profile/${config.profileId}/state`);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            applyStateUpdate(data);
+        } catch (err) {
+            // Silently ignore polling errors
+        } finally {
+            isPolling = false;
+        }
+    }
+
+    function applyStateUpdate(data) {
+        let needsRender = false;
+        let needsMidiRecalc = false;
+
+        // Update channel states
+        if (data.channels) {
+            for (const update of data.channels) {
+                const channel = channels.find(c => c.id === update.id);
+                if (!channel) continue;
+
+                // Only update if we're not currently dragging this fader
+                if (activeFader !== channel) {
+                    if (channel.current_level !== update.current_level) {
+                        channel.current_level = update.current_level;
+                        needsRender = true;
+                        sendMidiFader(channel);
+                    }
+                }
+
+                if (channel.is_muted !== update.is_muted) {
+                    channel.is_muted = update.is_muted;
+                    needsRender = true;
+                    needsMidiRecalc = true;
+                    sendMidiMute(channel);
+                }
+
+                if (channel.is_solo !== update.is_solo) {
+                    channel.is_solo = update.is_solo;
+                    needsRender = true;
+                    needsMidiRecalc = true;
+                    sendMidiSolo(channel);
+                }
+            }
+        }
+
+        // Update responsibility
+        if (data.responsibility !== undefined) {
+            const oldUser = responsibilityUser;
+            responsibilityUser = data.responsibility;
+
+            if (JSON.stringify(oldUser) !== JSON.stringify(responsibilityUser)) {
+                updateResponsibilityUI();
+                needsRender = true;
+            }
+        }
+
+        if (needsMidiRecalc) {
+            recalculateMidiOutputs();
+        }
+
+        if (needsRender) {
+            render();
+        }
     }
 
     function setupCanvas() {
@@ -573,12 +667,22 @@
         lastSendTime = now;
         pendingFaderValue = null;
 
-        socket.emit('fader_change', {
-            channel_id: channel.id,
-            level: channel.current_level,
-            user_id: config.userId,
-            is_final: isFinal
-        });
+        // Send via API (works under mod_wsgi)
+        fetch(`${window.BASE_URL}/api/channel/${channel.id}/level`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({level: channel.current_level})
+        }).catch(err => console.warn('Failed to update fader:', err));
+
+        // Also try Socket.IO for faster sync if available
+        if (socket && socket.connected) {
+            socket.emit('fader_change', {
+                channel_id: channel.id,
+                level: channel.current_level,
+                user_id: config.userId,
+                is_final: isFinal
+            });
+        }
 
         // Send MIDI
         sendMidiFader(channel);
@@ -588,11 +692,21 @@
         channel.is_muted = !channel.is_muted;
         render();
 
-        socket.emit('mute_toggle', {
-            channel_id: channel.id,
-            is_muted: channel.is_muted,
-            user_id: config.userId
-        });
+        // Send via API
+        fetch(`${window.BASE_URL}/api/channel/${channel.id}/mute`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_muted: channel.is_muted})
+        }).catch(err => console.warn('Failed to update mute:', err));
+
+        // Also try Socket.IO
+        if (socket && socket.connected) {
+            socket.emit('mute_toggle', {
+                channel_id: channel.id,
+                is_muted: channel.is_muted,
+                user_id: config.userId
+            });
+        }
 
         sendMidiMute(channel);
         recalculateMidiOutputs();
@@ -602,11 +716,21 @@
         channel.is_solo = !channel.is_solo;
         render();
 
-        socket.emit('solo_toggle', {
-            channel_id: channel.id,
-            is_solo: channel.is_solo,
-            user_id: config.userId
-        });
+        // Send via API
+        fetch(`${window.BASE_URL}/api/channel/${channel.id}/solo`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_solo: channel.is_solo})
+        }).catch(err => console.warn('Failed to update solo:', err));
+
+        // Also try Socket.IO
+        if (socket && socket.connected) {
+            socket.emit('solo_toggle', {
+                channel_id: channel.id,
+                is_solo: channel.is_solo,
+                user_id: config.userId
+            });
+        }
 
         sendMidiSolo(channel);
         recalculateMidiOutputs();

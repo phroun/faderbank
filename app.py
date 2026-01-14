@@ -359,6 +359,104 @@ def api_transfer_ownership(user, profile_id):
 # Channel Strip API Routes
 # =============================================================================
 
+@app.route('/api/profile/<int:profile_id>/state', methods=['GET'])
+@require_login
+def api_get_profile_state(user, profile_id):
+    """Get current profile state for polling-based sync."""
+    role = get_user_role(profile_id, user['user_id'])
+    if not role:
+        return jsonify({'error': 'Access denied'}), 403
+
+    channels = get_channel_strips(profile_id)
+
+    # Convert to JSON-safe format (handle datetime fields)
+    channel_states = []
+    for ch in channels:
+        channel_states.append({
+            'id': ch['id'],
+            'current_level': ch['current_level'],
+            'is_muted': bool(ch['is_muted']),
+            'is_solo': bool(ch['is_solo'])
+        })
+
+    # Get responsibility info
+    resp = get_responsibility(profile_id)
+    responsibility = None
+    if resp and resp.get('user_id'):
+        responsibility = {
+            'user_id': resp['user_id'],
+            'display_name': resp.get('display_name') or resp.get('username')
+        }
+
+    return jsonify({
+        'channels': channel_states,
+        'responsibility': responsibility
+    })
+
+
+@app.route('/api/channel/<int:channel_id>/level', methods=['POST'])
+@require_login
+def api_update_channel_level(user, channel_id):
+    """Update channel fader level."""
+    channel = get_channel_strip(channel_id)
+    if not channel:
+        return jsonify({'error': 'Channel not found'}), 404
+
+    role = get_user_role(channel['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician', 'operator']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json() or {}
+    level = data.get('level', 0)
+
+    # Clamp to valid range
+    level = max(0, min(127, int(level)))
+
+    update_fader_level(channel_id, level)
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/channel/<int:channel_id>/mute', methods=['POST'])
+@require_login
+def api_toggle_channel_mute(user, channel_id):
+    """Toggle channel mute state."""
+    channel = get_channel_strip(channel_id)
+    if not channel:
+        return jsonify({'error': 'Channel not found'}), 404
+
+    role = get_user_role(channel['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician', 'operator']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json() or {}
+    is_muted = data.get('is_muted', not channel['is_muted'])
+
+    update_mute_state(channel_id, is_muted)
+
+    return jsonify({'success': True, 'is_muted': is_muted})
+
+
+@app.route('/api/channel/<int:channel_id>/solo', methods=['POST'])
+@require_login
+def api_toggle_channel_solo(user, channel_id):
+    """Toggle channel solo state."""
+    channel = get_channel_strip(channel_id)
+    if not channel:
+        return jsonify({'error': 'Channel not found'}), 404
+
+    role = get_user_role(channel['profile_id'], user['user_id'])
+    if role not in ['owner', 'admin', 'technician', 'operator']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    data = request.get_json() or {}
+    is_solo = data.get('is_solo', not channel['is_solo'])
+
+    update_solo_state(channel_id, is_solo)
+
+    return jsonify({'success': True, 'is_solo': is_solo})
+
+
 @app.route('/api/profile/<int:profile_id>/channel', methods=['POST'])
 @require_login
 def api_create_channel(user, profile_id):
