@@ -519,6 +519,8 @@ body {
     cursor: grab;
     color: var(--text-muted);
     font-size: 1.2rem;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .channel-color-indicator {
@@ -605,6 +607,8 @@ body {
     cursor: grab;
     color: var(--text-muted);
     font-size: 1.2rem;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .button-config-main {

@@ -425,6 +425,63 @@ async function saveOrder() {
     }
 }
 
+// Button drag and drop reordering
+let draggedButton = null;
+
+document.querySelectorAll('.button-drag-handle').forEach(handle => {
+    const item = handle.closest('.button-config-item');
+
+    item.setAttribute('draggable', 'true');
+
+    handle.addEventListener('mousedown', () => {
+        item.setAttribute('draggable', 'true');
+    });
+
+    item.addEventListener('dragstart', (e) => {
+        draggedButton = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+
+    item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        draggedButton = null;
+        saveButtonOrder();
+    });
+
+    item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (draggedButton && draggedButton !== item) {
+            const list = document.getElementById('buttons-list');
+            const items = [...list.querySelectorAll('.button-config-item:not(.dragging)')];
+            const nextItem = items.find(i => {
+                const rect = i.getBoundingClientRect();
+                return e.clientY < rect.top + rect.height / 2;
+            });
+            if (nextItem) {
+                list.insertBefore(draggedButton, nextItem);
+            } else {
+                list.appendChild(draggedButton);
+            }
+        }
+    });
+});
+
+async function saveButtonOrder() {
+    const items = document.querySelectorAll('.button-config-item');
+    const order = [...items].map(item => parseInt(item.dataset.buttonId));
+
+    try {
+        await fetch(`${BASE_URL}/api/profile/${profileId}/buttons/reorder`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({order: order})
+        });
+    } catch (e) {
+        console.error('Error saving button order', e);
+    }
+}
+
 // Button management
 document.getElementById('btn-add-button').addEventListener('click', async () => {
     try {
