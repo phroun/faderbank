@@ -36,7 +36,7 @@ except ImportError:
 class AudioToMidi:
     def __init__(self, audio_device, midi_port, channel_mappings, midi_channel=1,
                  sample_rate=44100, block_size=1024, peak_hold_ms=100,
-                 attack_ms=10, release_ms=300, avg_window=8):
+                 attack_ms=10, release_ms=300, avg_window=8, gain_db=0, min_db=-60, debug=False):
         self.audio_device = audio_device
         self.midi_port = midi_port
         self.channel_mappings = channel_mappings  # {audio_ch: cc_number}
@@ -47,6 +47,10 @@ class AudioToMidi:
         self.attack_ms = attack_ms
         self.release_ms = release_ms
         self.avg_window = avg_window  # Number of RMS readings to average
+        self.gain_db = gain_db  # Input gain in dB
+        self.min_db = min_db  # Minimum dB level (floor)
+        self.debug = debug
+        self.debug_counter = 0
 
         self.running = False
         self.midi_out = None
@@ -136,6 +140,11 @@ class AudioToMidi:
 
         print(f"Mapping: {', '.join(f'ch{ch}->CC{cc}' for ch, cc in self.channel_mappings.items())}")
         print(f"MIDI Channel: {self.midi_channel + 1}")
+        if self.gain_db != 0:
+            print(f"Input Gain: {self.gain_db:+.1f} dB")
+        print(f"Level Range: {self.min_db:.0f} dB to 0 dB")
+        if self.debug:
+            print("Debug mode: ON")
         print("Running... Press Ctrl+C to stop")
 
     def audio_callback(self, indata, frames, time_info, status):
@@ -160,15 +169,22 @@ class AudioToMidi:
             # Use averaged RMS for smoother output
             avg_rms = np.mean(self.rms_buffers[audio_ch])
 
-            # Convert to dB and then to 0-1 range
-            # Assuming -60dB to 0dB range
+            # Convert to dB and apply gain
             if avg_rms > 0:
-                db = 20 * np.log10(avg_rms)
+                db = 20 * np.log10(avg_rms) + self.gain_db
             else:
-                db = -60
+                db = self.min_db
 
-            # Normalize to 0-1 (map -60dB..0dB to 0..1)
-            level = max(0, min(1, (db + 60) / 60))
+            # Normalize to 0-1 (map min_db..0dB to 0..1)
+            db_range = abs(self.min_db)
+            level = max(0, min(1, (db - self.min_db) / db_range))
+
+            # Debug output (every ~0.5 seconds)
+            if self.debug:
+                self.debug_counter += 1
+                if self.debug_counter >= 20:  # ~20 callbacks = ~0.5s at default settings
+                    self.debug_counter = 0
+                    print(f"  ch{audio_ch}: RMS={avg_rms:.6f}, dB={db:.1f}, level={level:.3f}, CC={int(level * 127)}")
 
             # Time-based smoothing (proper VU ballistics)
             # Calculate time since last update for this channel
@@ -307,6 +323,12 @@ Examples:
                         help='Release time in ms (default: 300)')
     parser.add_argument('--avg-window', type=int, default=8,
                         help='RMS averaging window size (default: 8 blocks)')
+    parser.add_argument('--gain', type=float, default=0,
+                        help='Input gain in dB (default: 0, try +20 to +40 for quiet signals)')
+    parser.add_argument('--min-db', type=float, default=-60,
+                        help='Minimum dB level / floor (default: -60, try -80 for more range)')
+    parser.add_argument('--debug', action='store_true',
+                        help='Show raw audio levels for debugging')
 
     args = parser.parse_args()
 
@@ -346,7 +368,10 @@ Examples:
         peak_hold_ms=args.peak_hold,
         attack_ms=args.attack,
         release_ms=args.release,
-        avg_window=args.avg_window
+        avg_window=args.avg_window,
+        gain_db=args.gain,
+        min_db=args.min_db,
+        debug=args.debug
     )
 
     # Handle Ctrl+C gracefully
