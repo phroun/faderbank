@@ -104,11 +104,14 @@ class OBSToMidi:
             return False
 
         # Connect event client for volume meters
+        # InputVolumeMeters is a high-volume event that must be explicitly subscribed
+        # The subscription value is 1 << 16 = 65536 for InputVolumeMeters
         try:
             self.events = obs.EventClient(
                 host=self.host,
                 port=self.port,
-                password=self.password if self.password else None
+                password=self.password if self.password else None,
+                subs=(1 << 16)  # EventSubscription.InputVolumeMeters
             )
             self.events.callback.register(self.on_input_volume_meters)
             print("Subscribed to audio level events")
