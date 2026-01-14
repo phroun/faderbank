@@ -376,7 +376,8 @@ def api_get_profile_state(user, profile_id):
             'id': ch['id'],
             'current_level': ch['current_level'],
             'is_muted': bool(ch['is_muted']),
-            'is_solo': bool(ch['is_solo'])
+            'is_solo': bool(ch['is_solo']),
+            'version': ch.get('state_version') or 0
         })
 
     # Get responsibility info
@@ -455,6 +456,42 @@ def api_toggle_channel_solo(user, channel_id):
     update_solo_state(channel_id, is_solo)
 
     return jsonify({'success': True, 'is_solo': is_solo})
+
+
+@app.route('/api/profile/<int:profile_id>/responsibility/take', methods=['POST'])
+@require_login
+def api_take_responsibility(user, profile_id):
+    """Take responsibility for a profile."""
+    role = get_user_role(profile_id, user['user_id'])
+    if role not in ['owner', 'admin', 'technician', 'operator']:
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
+    force = request.args.get('force') == '1'
+
+    # Check if someone else has responsibility
+    current = get_responsibility(profile_id)
+    if not force and current and current.get('user_id') and current['user_id'] != user['user_id']:
+        return jsonify({
+            'error': 'Someone else has responsibility',
+            'current_user': current.get('display_name') or current.get('username')
+        }), 409
+
+    take_responsibility(profile_id, user['user_id'])
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/profile/<int:profile_id>/responsibility/drop', methods=['POST'])
+@require_login
+def api_drop_responsibility(user, profile_id):
+    """Drop responsibility for a profile."""
+    role = get_user_role(profile_id, user['user_id'])
+    if not role:
+        return jsonify({'error': 'Access denied'}), 403
+
+    drop_responsibility(profile_id, user['user_id'])
+
+    return jsonify({'success': True})
 
 
 @app.route('/api/profile/<int:profile_id>/channel', methods=['POST'])

@@ -621,7 +621,7 @@ def update_fader_level(channel_id, level):
 
     try:
         cursor.execute(
-            "UPDATE channel_strip SET current_level = %s WHERE id = %s",
+            "UPDATE channel_strip SET current_level = %s, state_version = state_version + 1 WHERE id = %s",
             (level, channel_id)
         )
         db.commit()
@@ -637,7 +637,7 @@ def update_mute_state(channel_id, is_muted):
 
     try:
         cursor.execute(
-            "UPDATE channel_strip SET is_muted = %s WHERE id = %s",
+            "UPDATE channel_strip SET is_muted = %s, state_version = state_version + 1 WHERE id = %s",
             (is_muted, channel_id)
         )
         db.commit()
@@ -653,7 +653,7 @@ def update_solo_state(channel_id, is_solo):
 
     try:
         cursor.execute(
-            "UPDATE channel_strip SET is_solo = %s WHERE id = %s",
+            "UPDATE channel_strip SET is_solo = %s, state_version = state_version + 1 WHERE id = %s",
             (is_solo, channel_id)
         )
         db.commit()

@@ -39,6 +39,12 @@
     let canvas = null;
     let ctx = null;
 
+    // Version tracking for each channel (prevents stale updates)
+    const channelVersions = {};
+    channels.forEach(ch => {
+        channelVersions[ch.id] = ch.state_version || 0;
+    });
+
     // Interaction state
     let activeFader = null;
     let lastSendTime = 0;
@@ -126,7 +132,16 @@
                 const channel = channels.find(c => c.id === update.id);
                 if (!channel) continue;
 
-                // Only update if we're not currently dragging this fader
+                const serverVersion = update.version || 0;
+                const localVersion = channelVersions[channel.id] || 0;
+
+                // Only apply if server has newer version
+                if (serverVersion <= localVersion) continue;
+
+                // Update our tracked version
+                channelVersions[channel.id] = serverVersion;
+
+                // Only update fader if we're not currently dragging it
                 if (activeFader !== channel) {
                     if (channel.current_level !== update.current_level) {
                         channel.current_level = update.current_level;
@@ -667,6 +682,9 @@
         lastSendTime = now;
         pendingFaderValue = null;
 
+        // Optimistically bump version to prevent stale poll data from reverting our change
+        channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
+
         // Send via API (works under mod_wsgi)
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/level`, {
             method: 'POST',
@@ -692,6 +710,9 @@
         channel.is_muted = !channel.is_muted;
         render();
 
+        // Optimistically bump version to prevent stale poll data from reverting our change
+        channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
+
         // Send via API
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/mute`, {
             method: 'POST',
@@ -715,6 +736,9 @@
     function toggleSolo(channel) {
         channel.is_solo = !channel.is_solo;
         render();
+
+        // Optimistically bump version to prevent stale poll data from reverting our change
+        channelVersions[channel.id] = (channelVersions[channel.id] || 0) + 1;
 
         // Send via API
         fetch(`${window.BASE_URL}/api/channel/${channel.id}/solo`, {
@@ -959,31 +983,68 @@
     // ==========================================================================
 
     function setupResponsibilityControls() {
-        document.getElementById('btn-take-responsibility').addEventListener('click', () => {
-            socket.emit('take_responsibility', {
-                profile_id: config.profileId,
-                user_id: config.userId,
-                display_name: config.displayName,
-                force: false
-            });
+        document.getElementById('btn-take-responsibility').addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${window.BASE_URL}/api/profile/${config.profileId}/responsibility/take`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update local state immediately
+                    responsibilityUser = {
+                        user_id: config.userId,
+                        display_name: config.displayName
+                    };
+                    updateResponsibilityUI();
+                    render();
+                } else if (data.current_user) {
+                    // Someone else has it - show confirm dialog
+                    showResponsibilityConfirmModal(data.current_user);
+                } else {
+                    console.warn('Failed to take responsibility:', data.error);
+                }
+            } catch (err) {
+                console.warn('Failed to take responsibility:', err);
+            }
         });
 
-        document.getElementById('btn-drop-responsibility').addEventListener('click', () => {
-            socket.emit('drop_responsibility', {
-                profile_id: config.profileId,
-                user_id: config.userId
-            });
+        document.getElementById('btn-drop-responsibility').addEventListener('click', async () => {
+            try {
+                await fetch(`${window.BASE_URL}/api/profile/${config.profileId}/responsibility/drop`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                // Update local state immediately
+                responsibilityUser = null;
+                updateResponsibilityUI();
+                render();
+            } catch (err) {
+                console.warn('Failed to drop responsibility:', err);
+            }
         });
 
         document.getElementById('btn-responsibility-cancel').addEventListener('click', hideResponsibilityModal);
-        document.getElementById('btn-responsibility-confirm').addEventListener('click', () => {
-            socket.emit('take_responsibility', {
-                profile_id: config.profileId,
-                user_id: config.userId,
-                display_name: config.displayName,
-                force: true
-            });
+        document.getElementById('btn-responsibility-confirm').addEventListener('click', async () => {
             hideResponsibilityModal();
+            // Force take - we need to drop the other person's responsibility first via a force endpoint
+            // For now, the regular take will work since we're just updating the DB
+            try {
+                // Use a direct DB update approach - take_responsibility replaces whoever has it
+                await fetch(`${window.BASE_URL}/api/profile/${config.profileId}/responsibility/take?force=1`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                responsibilityUser = {
+                    user_id: config.userId,
+                    display_name: config.displayName
+                };
+                updateResponsibilityUI();
+                render();
+            } catch (err) {
+                console.warn('Failed to force take responsibility:', err);
+            }
         });
     }
 

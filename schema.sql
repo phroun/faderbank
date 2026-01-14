@@ -69,6 +69,7 @@ CREATE TABLE channel_strip (
     current_level INT DEFAULT 0,           -- Current fader position (0-127)
     is_muted BOOLEAN DEFAULT FALSE,        -- Mute button state
     is_solo BOOLEAN DEFAULT FALSE,         -- Solo button state
+    state_version INT DEFAULT 0,           -- Increments on every state change (level/mute/solo)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (profile_id) REFERENCES profile(id) ON DELETE CASCADE,
