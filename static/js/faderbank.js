@@ -1257,12 +1257,24 @@
 
         const name = document.createElement('span');
         const hasResponsibility = responsibilityUser && responsibilityUser.user_id === parseInt(user.id);
+
+        // Build name with role emoji prefix
+        let prefix = '';
+        if (user.role === 'owner') {
+            prefix = '👑 ';
+        } else if (user.role === 'admin') {
+            prefix = '🔑 ';
+        } else if (user.role === 'technician') {
+            prefix = '🔧 ';
+        }
+
+        // Add responsibility emoji after role emoji
         if (hasResponsibility) {
             name.className = 'user-has-responsibility';
-            name.textContent = '🎛️ ' + user.display_name;
-        } else {
-            name.textContent = user.display_name;
+            prefix += '🎛️ ';
         }
+
+        name.textContent = prefix + user.display_name;
         li.appendChild(name);
 
         // Add "(you)" indicator for current user
