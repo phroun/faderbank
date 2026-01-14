@@ -214,7 +214,7 @@ def new_profile(user):
 
         try:
             profile_id = create_profile(name, slug, user['user_id'])
-            return redirect(f'/profile/{slug}')
+            return redirect(f'{request.script_root}/profile/{slug}')
         except Exception as e:
             return render_template('profile_new.html', user=user,
                                    error=str(e))
@@ -633,7 +633,7 @@ def redeem_invite(token):
     success, result = redeem_activation_link(token, user['user_id'])
 
     if success:
-        return redirect(f'/profile/{result}')
+        return redirect(f'{request.script_root}/profile/{result}')
     else:
         return render_template('error.html', error=result), 400
 
