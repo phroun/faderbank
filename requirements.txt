@@ -3,3 +3,4 @@ flask-socketio
 requests
 pymysql
 eventlet
+gunicorn
