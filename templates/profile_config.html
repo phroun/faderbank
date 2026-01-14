@@ -134,7 +134,7 @@ const profileSlug = '{{ profile.slug }}';
 // Channel management
 document.getElementById('btn-add-channel').addEventListener('click', async () => {
     try {
-        const response = await fetch(`/api/profile/${profileId}/channel`, {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/channel`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({})
@@ -167,7 +167,7 @@ document.querySelectorAll('.btn-save-channel').forEach(btn => {
         };
 
         try {
-            const response = await fetch(`/api/channel/${channelId}/update`, {
+            const response = await fetch(`${BASE_URL}/api/channel/${channelId}/update`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
@@ -194,7 +194,7 @@ document.querySelectorAll('.btn-delete-channel').forEach(btn => {
         const channelId = item.dataset.channelId;
 
         try {
-            const response = await fetch(`/api/channel/${channelId}/delete`, {
+            const response = await fetch(`${BASE_URL}/api/channel/${channelId}/delete`, {
                 method: 'POST'
             });
             const result = await response.json();
@@ -217,7 +217,7 @@ document.querySelectorAll('.member-role-select').forEach(select => {
         const newRole = this.value;
 
         try {
-            const response = await fetch(`/api/profile/${profileId}/member/${userId}/role`, {
+            const response = await fetch(`${BASE_URL}/api/profile/${profileId}/member/${userId}/role`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({role: newRole})
@@ -241,7 +241,7 @@ document.querySelectorAll('.btn-remove-member').forEach(btn => {
         const userId = item.dataset.userId;
 
         try {
-            const response = await fetch(`/api/profile/${profileId}/member/${userId}/remove`, {
+            const response = await fetch(`${BASE_URL}/api/profile/${profileId}/member/${userId}/remove`, {
                 method: 'POST'
             });
             const result = await response.json();
@@ -261,7 +261,7 @@ document.getElementById('btn-create-invite')?.addEventListener('click', async ()
     const role = document.getElementById('invite-role').value;
 
     try {
-        const response = await fetch(`/api/profile/${profileId}/invite`, {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/invite`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({role: role})
@@ -294,7 +294,7 @@ document.querySelectorAll('.btn-cancel-invite').forEach(btn => {
         const linkId = item.dataset.linkId;
 
         try {
-            const response = await fetch(`/api/invite/${linkId}/cancel`, {
+            const response = await fetch(`${BASE_URL}/api/invite/${linkId}/cancel`, {
                 method: 'POST'
             });
             const result = await response.json();
@@ -351,7 +351,7 @@ async function saveOrder() {
     const order = [...items].map(item => parseInt(item.dataset.channelId));
 
     try {
-        await fetch(`/api/profile/${profileId}/channels/reorder`, {
+        await fetch(`${BASE_URL}/api/profile/${profileId}/channels/reorder`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({order: order})

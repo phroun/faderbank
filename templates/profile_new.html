@@ -14,7 +14,7 @@
         <div class="form-group">
             <label for="name">Profile Name</label>
             <input type="text" id="name" name="name" required
-                   placeholder="e.g., Studio A"
+                   placeholder="e.g., Main Studio"
                    value="{{ request.form.get('name', '') }}">
         </div>
 
@@ -23,7 +23,7 @@
             <div class="input-with-status">
                 <input type="text" id="slug" name="slug" required
                        pattern="[a-z0-9-]+"
-                       placeholder="e.g., studio-a"
+                       placeholder="e.g., main-studio"
                        value="{{ request.form.get('slug', '') }}">
                 <span id="slug-status" class="input-status"></span>
             </div>
@@ -78,7 +78,7 @@ function checkSlugAvailability(slug) {
 
     checkTimeout = setTimeout(async () => {
         try {
-            const response = await fetch(`/api/slug/check?slug=${encodeURIComponent(slug)}`);
+            const response = await fetch(`${BASE_URL}/api/slug/check?slug=${encodeURIComponent(slug)}`);
             const data = await response.json();
 
             if (data.available) {

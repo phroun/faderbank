@@ -120,7 +120,7 @@ slugInput.addEventListener('input', function() {
 
     checkTimeout = setTimeout(async () => {
         try {
-            const response = await fetch(`/api/slug/check?slug=${encodeURIComponent(slug)}&exclude=${profileId}`);
+            const response = await fetch(`${BASE_URL}/api/slug/check?slug=${encodeURIComponent(slug)}&exclude=${profileId}`);
             const data = await response.json();
 
             if (data.available) {
@@ -145,7 +145,7 @@ document.getElementById('profile-details-form').addEventListener('submit', async
     const slug = document.getElementById('profile-slug').value.trim().toLowerCase();
 
     try {
-        const response = await fetch(`/api/profile/${profileId}/update`, {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/update`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name, slug})
@@ -154,7 +154,7 @@ document.getElementById('profile-details-form').addEventListener('submit', async
 
         if (result.success) {
             if (slug !== currentSlug) {
-                window.location.href = `/profile/${slug}/settings`;
+                window.location.href = `${BASE_URL}/profile/${slug}/settings`;
             } else {
                 alert('Saved!');
             }
@@ -192,7 +192,7 @@ document.getElementById('transfer-form').addEventListener('submit', async (e) =>
     if (!newOwnerId || transferConfirmInput.value !== 'TRANSFER') return;
 
     try {
-        const response = await fetch(`/api/profile/${profileId}/transfer`, {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/transfer`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({new_owner_id: parseInt(newOwnerId)})
@@ -201,7 +201,7 @@ document.getElementById('transfer-form').addEventListener('submit', async (e) =>
 
         if (result.success) {
             alert('Ownership transferred. You are now an admin.');
-            window.location.href = `/profile/${currentSlug}`;
+            window.location.href = `${BASE_URL}/profile/${currentSlug}`;
         } else {
             alert(result.error || 'Failed to transfer');
         }
@@ -233,13 +233,13 @@ btnDelete.addEventListener('click', async () => {
     if (deleteConfirmInput.value !== deleteConfirmText) return;
 
     try {
-        const response = await fetch(`/api/profile/${profileId}/delete`, {
+        const response = await fetch(`${BASE_URL}/api/profile/${profileId}/delete`, {
             method: 'POST'
         });
         const result = await response.json();
 
         if (result.success) {
-            window.location.href = '/';
+            window.location.href = `${BASE_URL}/`;
         } else {
             alert(result.error || 'Failed to delete');
         }

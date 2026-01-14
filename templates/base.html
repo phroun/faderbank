@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Faderbank{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>window.BASE_URL = '{{ request.script_root }}';</script>
     {% block head %}{% endblock %}
 </head>
 <body>
     <header class="top-bar">
         <div class="top-bar-left">
-            <a href="/" class="logo">Faderbank</a>
+            <a href="{{ request.script_root }}/" class="logo">Faderbank</a>
             {% block nav %}{% endblock %}
         </div>
         <div class="top-bar-right">
