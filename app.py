@@ -99,7 +99,7 @@ def require_profile_access(min_role=None):
             if min_role and role_levels.get(role, 0) < role_levels.get(min_role, 0):
                 return render_template('error.html', error="Insufficient permissions"), 403
 
-            return f(user=user, profile=profile, role=role, *args, **kwargs)
+            return f(user=user, profile=profile, role=role, slug=slug, *args, **kwargs)
         return decorated_function
     return decorator
 
