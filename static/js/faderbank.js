@@ -1163,6 +1163,7 @@
         document.getElementById('btn-midi-enable').style.display = midiEnabled ? 'none' : 'inline-flex';
         document.getElementById('btn-midi-config').style.display = midiEnabled ? 'inline-flex' : 'none';
         document.getElementById('btn-midi-disable').style.display = midiEnabled ? 'inline-flex' : 'none';
+        document.getElementById('midi-debug').style.display = midiEnabled ? 'block' : 'none';
     }
 
     function sendMidiFader(channel) {
