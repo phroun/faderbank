@@ -626,16 +626,24 @@
     }
 
     function handleTouchStart(e) {
-        e.preventDefault();
         if (e.touches.length === 1) {
             const touch = e.touches[0];
-            handlePointerDown({ clientX: touch.clientX, clientY: touch.clientY });
+            const coords = getCanvasCoords({ clientX: touch.clientX, clientY: touch.clientY });
+            const hit = hitTest(coords.x, coords.y);
+
+            // Only prevent scrolling if touching an interactive element
+            if (hit) {
+                e.preventDefault();
+                handlePointerDown({ clientX: touch.clientX, clientY: touch.clientY });
+            }
+            // Otherwise allow normal touch behavior (scrolling)
         }
     }
 
     function handleTouchMove(e) {
-        e.preventDefault();
+        // Only prevent scrolling if actively dragging a fader
         if (e.touches.length === 1 && activeFader) {
+            e.preventDefault();
             const touch = e.touches[0];
             const coords = getCanvasCoords({ clientX: touch.clientX, clientY: touch.clientY });
             updateFaderFromDrag(coords.y);
