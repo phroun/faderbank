@@ -16,23 +16,32 @@ import time
 import threading
 
 try:
-    import mido
+    import pygame.midi
 except ImportError:
-    print("Error: mido not installed. Run: pip install mido")
+    print("Error: pygame not installed. Run: pip install pygame")
     sys.exit(1)
 
 
 def list_midi_ports():
     """List available MIDI input ports."""
-    ports = mido.get_input_names()
-
-    if not ports:
-        print("No MIDI input ports found.")
-        return
+    pygame.midi.init()
 
     print("Available MIDI input ports:")
-    for i, port in enumerate(ports):
-        print(f"  {i}: {port}")
+    count = pygame.midi.get_count()
+    found = False
+    for i in range(count):
+        info = pygame.midi.get_device_info(i)
+        # info: (interface, name, is_input, is_output, opened)
+        name = info[1].decode('utf-8')
+        is_input = info[2]
+        if is_input:
+            found = True
+            print(f"  {i}: {name}")
+
+    if not found:
+        print("  (none found)")
+
+    pygame.midi.quit()
 
 
 def set_macos_volume(level):
@@ -84,30 +93,45 @@ class MidiVolumeController:
 
     def start(self):
         """Start listening for MIDI messages."""
-        ports = mido.get_input_names()
+        pygame.midi.init()
+
+        count = pygame.midi.get_count()
 
         # Find the port
+        port_id = None
         port_name = None
+
         if isinstance(self.midi_port, int):
-            if self.midi_port < len(ports):
-                port_name = ports[self.midi_port]
+            if self.midi_port < count:
+                info = pygame.midi.get_device_info(self.midi_port)
+                if info[2]:  # is_input
+                    port_id = self.midi_port
+                    port_name = info[1].decode('utf-8')
         else:
-            for port in ports:
-                if self.midi_port.lower() in port.lower():
-                    port_name = port
+            for i in range(count):
+                info = pygame.midi.get_device_info(i)
+                name = info[1].decode('utf-8')
+                is_input = info[2]
+                if is_input and self.midi_port.lower() in name.lower():
+                    port_id = i
+                    port_name = name
                     break
 
-        if port_name is None:
+        if port_id is None:
             print(f"Error: MIDI port '{self.midi_port}' not found.")
-            print("Available ports:")
-            for i, port in enumerate(ports):
-                print(f"  {i}: {port}")
+            print("Available input ports:")
+            for i in range(count):
+                info = pygame.midi.get_device_info(i)
+                if info[2]:  # is_input
+                    print(f"  {i}: {info[1].decode('utf-8')}")
+            pygame.midi.quit()
             return False
 
         try:
-            self.midi_in = mido.open_input(port_name)
+            self.midi_in = pygame.midi.Input(port_id)
         except Exception as e:
             print(f"Error opening MIDI port: {e}")
+            pygame.midi.quit()
             return False
 
         self.running = True
@@ -139,6 +163,7 @@ class MidiVolumeController:
         if self.midi_in:
             self.midi_in.close()
             self.midi_in = None
+        pygame.midi.quit()
 
     def apply_volume(self, volume):
         """Actually apply the volume change."""
@@ -154,21 +179,27 @@ class MidiVolumeController:
             self.pending_volume = None
         self.debounce_timer = None
 
-    def process_message(self, msg):
-        """Process a MIDI message."""
-        # Check if it's a CC message
-        if msg.type != 'control_change':
+    def process_event(self, event):
+        """Process a MIDI event."""
+        # event: [[status, data1, data2, data3], timestamp]
+        data = event[0]
+        status = data[0]
+
+        # Check if it's a CC message (0xB0-0xBF)
+        if not (0xB0 <= status <= 0xBF):
             return
 
         # Check channel
-        if msg.channel != self.midi_channel:
+        msg_channel = status & 0x0F
+        if msg_channel != self.midi_channel:
             return
+
+        cc = data[1]
+        value = data[2]
 
         # Check CC number
-        if msg.control != self.cc_number:
+        if cc != self.cc_number:
             return
-
-        value = msg.value
 
         # Convert MIDI value (0-127) to volume (0-100)
         if self.invert:
@@ -199,8 +230,10 @@ class MidiVolumeController:
     def run(self):
         """Main loop to process MIDI messages."""
         while self.running:
-            for msg in self.midi_in.iter_pending():
-                self.process_message(msg)
+            if self.midi_in.poll():
+                events = self.midi_in.read(10)
+                for event in events:
+                    self.process_event(event)
             time.sleep(0.001)  # Small sleep to avoid busy-waiting
 
 
