@@ -53,6 +53,15 @@
                     <input type="number" class="channel-cc-solo" value="{{ channel.midi_cc_solo or '' }}" min="0" max="127" placeholder="None">
                 </div>
                 <div class="config-field">
+                    <label>MIDI Ch</label>
+                    <select class="channel-midi-channel">
+                        <option value="">Default</option>
+                        {% for ch in range(1, 17) %}
+                        <option value="{{ ch }}" {% if channel.midi_channel == ch %}selected{% endif %}>{{ ch }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="config-field">
                     <label>Min</label>
                     <input type="number" class="channel-min" value="{{ channel.min_level }}" min="0" max="127">
                 </div>
@@ -94,6 +103,15 @@
                 <div class="config-field">
                     <label class="button-cc-label">{% if button.midi_type == 'note' %}Note{% elif button.midi_type == 'pc' %}Program{% else %}CC{% endif %} #</label>
                     <input type="number" class="button-cc" value="{{ button.midi_cc }}" min="0" max="127">
+                </div>
+                <div class="config-field">
+                    <label>MIDI Ch</label>
+                    <select class="button-midi-channel">
+                        <option value="">Default</option>
+                        {% for ch in range(1, 17) %}
+                        <option value="{{ ch }}" {% if button.midi_channel == ch %}selected{% endif %}>{{ ch }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="config-field">
                     <label class="button-on-label">{% if button.midi_type == 'note' %}Velocity{% elif button.midi_type == 'pc' %}Program{% else %}On Value{% endif %}</label>
@@ -218,6 +236,7 @@ document.querySelectorAll('.btn-save-channel').forEach(btn => {
         const item = this.closest('.channel-config-item');
         const channelId = item.dataset.channelId;
 
+        const midiChannelVal = item.querySelector('.channel-midi-channel').value;
         const data = {
             name: item.querySelector('.channel-name').value,
             color: item.querySelector('.channel-color').value,
@@ -226,6 +245,7 @@ document.querySelectorAll('.btn-save-channel').forEach(btn => {
             midi_cc_vu_input_right: parseInt(item.querySelector('.channel-cc-vu-right').value) || null,
             midi_cc_mute: parseInt(item.querySelector('.channel-cc-mute').value) || null,
             midi_cc_solo: parseInt(item.querySelector('.channel-cc-solo').value) || null,
+            midi_channel: midiChannelVal ? parseInt(midiChannelVal) : null,
             min_level: parseInt(item.querySelector('.channel-min').value) || 0,
             max_level: parseInt(item.querySelector('.channel-max').value) || 127
         };
@@ -507,10 +527,12 @@ document.querySelectorAll('.btn-save-button').forEach(btn => {
         const buttonId = item.dataset.buttonId;
 
         const channelVal = item.querySelector('.button-channel').value;
+        const midiChannelVal = item.querySelector('.button-midi-channel').value;
         const data = {
             label: item.querySelector('.button-label').value,
             midi_type: item.querySelector('.button-midi-type').value,
             midi_cc: parseInt(item.querySelector('.button-cc').value) || 0,
+            midi_channel: midiChannelVal ? parseInt(midiChannelVal) : null,
             on_value: parseInt(item.querySelector('.button-on-value').value) || 127,
             off_value: parseInt(item.querySelector('.button-off-value').value) || 0,
             mode: item.querySelector('.button-mode').value,

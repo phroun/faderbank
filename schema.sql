@@ -65,6 +65,7 @@ CREATE TABLE channel_strip (
     midi_cc_vu_input_right INT,            -- CC number for VU level input right (NULL for mono)
     midi_cc_mute INT,                      -- CC number for mute button (NULL if not used)
     midi_cc_solo INT,                      -- CC number for solo button (NULL if not used)
+    midi_channel INT,                      -- MIDI channel override (NULL = use default)
     min_level INT DEFAULT 0,               -- Minimum fader value (0-127)
     max_level INT DEFAULT 127,             -- Maximum fader value (0-127)
     current_level INT DEFAULT 0,           -- Current fader position (0-127)
@@ -113,6 +114,7 @@ CREATE TABLE button (
     label VARCHAR(255) NOT NULL,
     midi_type ENUM('cc', 'note', 'pc') DEFAULT 'cc',  -- Message type: CC, Note, or Program Change
     midi_cc INT NOT NULL,                  -- CC/Note/Program number (0-127)
+    midi_channel INT,                      -- MIDI channel override (NULL = use default)
     on_value INT DEFAULT 127,              -- Value when "on": CC value, note velocity, or program number
     off_value INT DEFAULT 0,               -- Value when "off": CC value, note velocity, or program number
     mode ENUM('momentary', 'toggle') DEFAULT 'momentary',

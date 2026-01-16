@@ -528,7 +528,7 @@ def get_channel_strip(channel_id):
 
 def create_channel_strip(profile_id, name, position, color='white',
                          midi_cc_output=0, midi_cc_vu_input=None, midi_cc_vu_input_right=None,
-                         midi_cc_mute=None, midi_cc_solo=None,
+                         midi_cc_mute=None, midi_cc_solo=None, midi_channel=None,
                          min_level=0, max_level=127):
     """Create a new channel strip."""
     db = get_db()
@@ -538,10 +538,10 @@ def create_channel_strip(profile_id, name, position, color='white',
         cursor.execute(
             """INSERT INTO channel_strip
                (profile_id, name, position, color, midi_cc_output, midi_cc_vu_input,
-                midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, min_level, max_level)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, midi_channel, min_level, max_level)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (profile_id, name, position, color, midi_cc_output, midi_cc_vu_input,
-             midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, min_level, max_level)
+             midi_cc_vu_input_right, midi_cc_mute, midi_cc_solo, midi_channel, min_level, max_level)
         )
         db.commit()
         return cursor.lastrowid
@@ -559,8 +559,8 @@ def update_channel_strip(channel_id, **kwargs):
     cursor = db.cursor()
 
     allowed_fields = ['name', 'position', 'color', 'midi_cc_output', 'midi_cc_vu_input',
-                      'midi_cc_vu_input_right', 'midi_cc_mute', 'midi_cc_solo', 'min_level', 'max_level',
-                      'current_level', 'is_muted', 'is_solo']
+                      'midi_cc_vu_input_right', 'midi_cc_mute', 'midi_cc_solo', 'midi_channel',
+                      'min_level', 'max_level', 'current_level', 'is_muted', 'is_solo']
 
     updates = []
     params = []
@@ -954,7 +954,8 @@ def get_button(button_id):
 
 
 def create_button(profile_id, label, midi_cc, on_value=127, off_value=0,
-                  mode='momentary', channel_strip_id=None, display_order=0, midi_type='cc'):
+                  mode='momentary', channel_strip_id=None, display_order=0, midi_type='cc',
+                  midi_channel=None):
     """Create a new button."""
     db = get_db()
     cursor = db.cursor()
@@ -962,9 +963,9 @@ def create_button(profile_id, label, midi_cc, on_value=127, off_value=0,
     try:
         cursor.execute(
             """INSERT INTO button
-               (profile_id, label, midi_type, midi_cc, on_value, off_value, mode, channel_strip_id, display_order)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (profile_id, label, midi_type, midi_cc, on_value, off_value, mode, channel_strip_id, display_order)
+               (profile_id, label, midi_type, midi_cc, midi_channel, on_value, off_value, mode, channel_strip_id, display_order)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (profile_id, label, midi_type, midi_cc, midi_channel, on_value, off_value, mode, channel_strip_id, display_order)
         )
         db.commit()
         return cursor.lastrowid
@@ -981,8 +982,8 @@ def update_button(button_id, **kwargs):
     db = get_db()
     cursor = db.cursor()
 
-    allowed_fields = ['label', 'midi_type', 'midi_cc', 'on_value', 'off_value', 'mode',
-                      'channel_strip_id', 'display_order', 'is_on']
+    allowed_fields = ['label', 'midi_type', 'midi_cc', 'midi_channel', 'on_value', 'off_value',
+                      'mode', 'channel_strip_id', 'display_order', 'is_on']
 
     updates = []
     params = []

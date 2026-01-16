@@ -1219,6 +1219,11 @@
         document.getElementById('midi-debug').style.display = midiEnabled ? 'block' : 'none';
     }
 
+    function getEffectiveMidiChannel(item) {
+        // Use item-specific midi_channel if set, otherwise use global default
+        return item.midi_channel ? (item.midi_channel - 1) : (midiChannel - 1);
+    }
+
     function sendMidiFader(channel) {
         if (!midiOutput || !midiEnabled) return;
 
@@ -1229,14 +1234,16 @@
         const outputLevel = isEffectivelyMuted ? 0 : channel.current_level;
 
         // Send CC message: [status, cc number, value]
-        const status = 0xB0 + (midiChannel - 1);  // CC message on channel
+        const chan = getEffectiveMidiChannel(channel);
+        const status = 0xB0 + chan;
         midiOutput.send([status, channel.midi_cc_output, outputLevel]);
     }
 
     function sendMidiMute(channel) {
         if (!midiOutput || !midiEnabled || !channel.midi_cc_mute) return;
 
-        const status = 0xB0 + (midiChannel - 1);
+        const chan = getEffectiveMidiChannel(channel);
+        const status = 0xB0 + chan;
         const value = channel.is_muted ? 127 : 0;
         midiOutput.send([status, channel.midi_cc_mute, value]);
     }
@@ -1244,7 +1251,8 @@
     function sendMidiSolo(channel) {
         if (!midiOutput || !midiEnabled || !channel.midi_cc_solo) return;
 
-        const status = 0xB0 + (midiChannel - 1);
+        const chan = getEffectiveMidiChannel(channel);
+        const status = 0xB0 + chan;
         const value = channel.is_solo ? 127 : 0;
         midiOutput.send([status, channel.midi_cc_solo, value]);
     }
@@ -1253,8 +1261,8 @@
         if (!midiOutput || !midiEnabled) return;
 
         const midiType = data.midi_type || 'cc';
-        const chan = midiChannel - 1;
-        console.log('sendButtonMidi:', data.mode, 'type:', midiType, 'num:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
+        const chan = data.midi_channel ? (data.midi_channel - 1) : (midiChannel - 1);
+        console.log('sendButtonMidi:', data.mode, 'type:', midiType, 'ch:', chan + 1, 'num:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
 
         if (data.mode === 'momentary') {
             // Momentary: send on message, then off message after short delay
