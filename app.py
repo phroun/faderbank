@@ -637,6 +637,7 @@ def api_update_channel(user, channel_id):
         midi_cc_vu_input_right=data.get('midi_cc_vu_input_right'),
         midi_cc_mute=data.get('midi_cc_mute'),
         midi_cc_solo=data.get('midi_cc_solo'),
+        midi_channel=data.get('midi_channel'),
         min_level=data.get('min_level'),
         max_level=data.get('max_level')
     )
@@ -767,6 +768,7 @@ def api_update_button(user, button_id):
         label=data.get('label'),
         midi_type=data.get('midi_type'),
         midi_cc=data.get('midi_cc'),
+        midi_channel=data.get('midi_channel'),
         on_value=data.get('on_value'),
         off_value=data.get('off_value'),
         mode=data.get('mode'),
