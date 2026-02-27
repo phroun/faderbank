@@ -838,6 +838,7 @@ def api_press_button(user, button_id):
             'mode': button['mode'],
             'midi_type': button['midi_type'],
             'midi_cc': button['midi_cc'],
+            'midi_channel': button['midi_channel'],
             'on_value': button['on_value'],
             'off_value': button['off_value'],
             'new_state': new_state,  # For toggle: True/False, for momentary: None
