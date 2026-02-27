@@ -1262,6 +1262,7 @@
 
         const midiType = data.midi_type || 'cc';
         const chan = data.midi_channel ? (data.midi_channel - 1) : (midiChannel - 1);
+        console.log('sendButtonMidi:', 'data.midi_channel:', data.midi_channel, 'defaultChannel:', midiChannel, 'effectiveChan:', chan + 1);
         console.log('sendButtonMidi:', data.mode, 'type:', midiType, 'ch:', chan + 1, 'num:', data.midi_cc, 'on:', data.on_value, 'off:', data.off_value, 'state:', data.new_state);
 
         if (data.mode === 'momentary') {
